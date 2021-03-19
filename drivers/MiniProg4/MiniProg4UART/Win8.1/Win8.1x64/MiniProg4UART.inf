@@ -1,0 +1,116 @@
+; Windows USB CDC setup file for MiniProg4 programmer
+; (c) Copyright 2018 Cypress Semiconductor Corporation
+
+[Version]
+Signature="$Windows NT$"
+Class=Ports
+ClassGuid={4D36E978-E325-11CE-BFC1-08002BE10318}
+Provider=%PROVIDER%
+CatalogFile=MiniProg4UART.cat
+;;;LayoutFile=layout.inf
+DriverVer=06/12/2018,2.0.0000.4
+;;;DriverPackageDisplayName=%DESCRIPTION%
+
+[Manufacturer]
+%MFGNAME%=DeviceList, NTx86, NTia64, NTamd64
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[SourceDisksFiles]
+
+[SourceDisksNames]
+
+[DeviceList.NTx86]
+%DESCRIPTION%=DriverInstall, USB\VID_04b4&PID_f151&MI_02
+%DESCRIPTION%=DriverInstall, USB\VID_04b4&PID_f152&MI_02
+
+[DeviceList.NTia64]
+%DESCRIPTION%=DriverInstall, USB\VID_04b4&PID_f151&MI_02
+%DESCRIPTION%=DriverInstall, USB\VID_04b4&PID_f152&MI_02
+
+[DeviceList.NTamd64]
+%DESCRIPTION%=DriverInstall, USB\VID_04b4&PID_f151&MI_02
+%DESCRIPTION%=DriverInstall, USB\VID_04b4&PID_f152&MI_02
+
+[FakeModemCopyFileSection]
+
+;------------------------------------------------------------------------------
+;  32 bit section for Windows 2000/2003/XP/Vista
+;------------------------------------------------------------------------------
+
+[DriverInstall.NTx86]
+include=mdmcpq.inf
+;;;;CopyFiles=DriverCopyFiles
+CopyFiles=FakeModemCopyFileSection
+AddReg=DriverInstall.NTx86.AddReg
+
+;;;;[DriverCopyFiles]
+;;;;usbser.sys,,,0x20
+
+[DriverInstall.NTx86.AddReg]
+HKR,,DevLoader,,*ntkern
+HKR,,NTMPDriver,,usbser.sys
+HKR,,EnumPropPages32,,"MsPorts.dll,SerialPortPropPageProvider"
+
+[DriverInstall.NTx86.Services]
+AddService=usbser, 0x00000002, DriverService
+
+;------------------------------------------------------------------------------
+;  64 bit section for Intel Itanium based systems
+;------------------------------------------------------------------------------
+
+[DriverInstall.NTia64]
+include=mdmcpq.inf
+;;;;CopyFiles=DriverCopyFiles
+CopyFiles=FakeModemCopyFileSection
+AddReg=DriverInstall.NTia64.AddReg
+
+;;;;[DriverCopyFiles]
+;;;;usbser.sys,,,0x20
+
+[DriverInstall.NTia64.AddReg]
+HKR,,DevLoader,,*ntkern
+HKR,,NTMPDriver,,usbser.sys
+HKR,,EnumPropPages32,,"MsPorts.dll,SerialPortPropPageProvider"
+
+[DriverInstall.NTia64.Services]
+AddService=usbser, 0x00000002, DriverService
+
+;------------------------------------------------------------------------------
+;  64 bit section for AMD64 and Intel EM64T based systems
+;------------------------------------------------------------------------------
+
+[DriverInstall.NTamd64]
+include=mdmcpq.inf
+;;;;CopyFiles=DriverCopyFiles
+CopyFiles=FakeModemCopyFileSection
+AddReg=DriverInstall.NTamd64.AddReg
+
+;;;;[DriverCopyFiles]
+;;;;usbser.sys,,,0x20
+
+[DriverInstall.NTamd64.AddReg]
+HKR,,DevLoader,,*ntkern
+HKR,,NTMPDriver,,usbser.sys
+HKR,,EnumPropPages32,,"MsPorts.dll,SerialPortPropPageProvider"
+
+[DriverInstall.NTamd64.Services]
+AddService=usbser, 0x00000002, DriverService
+
+[DriverService]
+DisplayName=%SERVICE%
+ServiceType=1
+StartType=3
+ErrorControl=1
+ServiceBinary=%12%\usbser.sys
+
+;------------------------------------------------------------------------------
+;  String Definitions
+;------------------------------------------------------------------------------
+
+[Strings]
+PROVIDER="Cypress"
+MFGNAME="Cypress"
+DESCRIPTION="MiniProg4 USB-UART"
+SERVICE="USB RS-232"

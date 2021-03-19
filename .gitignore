@@ -1,0 +1,25 @@
+# Compiled files
+/**/Release/*
+/**/Debug/*
+# Build logs
+BUILD.log
+# Generated export
+/**/Export/*
+# Generated sources
+/KitProg3.cydsn/codegentemp/*
+/KitProg3.cydsn/Generated_Source/PSoC5/*
+/KitProg3_Bootloader.cydsn/codegentemp/*
+/KitProg3_Bootloader.cydsn/Generated_Source/PSoC5/*
+# Mandatory files
+!/KitProg3.cydsn/Generated_Source/PSoC5/isr_RTSDelay.c
+!/KitProg3.cydsn/Generated_Source/PSoC5/isr_SWDXRES.c
+!/KitProg3.cydsn/Generated_Source/PSoC5/USBFS_episr.c
+!/KitProg3.cydsn/Generated_Source/PSoC5/USBFS_vnd.c
+# PSoC Creator's supplementary files
+*.cycdx
+*.cyfit
+*.cyprj.*
+*.rpt
+*.svd
+*_timing.html
+*.cywrk.*
