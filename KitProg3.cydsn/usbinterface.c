@@ -4,7 +4,7 @@
 * @brief
 *  Executable code for KitProg3
 *
-* @version KitProg3 v2.21
+* @version KitProg3 v2.30
 */
 /*
 * Related Documents:
@@ -14,20 +14,19 @@
 *
 *
 ******************************************************************************
-* Copyright (2018), Cypress Semiconductor Corporation or a
-* subsidiary of Cypress Semiconductor Corporation. All rights
-* reserved.
+* (c) (2018-2021), Cypress Semiconductor Corporation (an Infineon company)
+* or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
 * owned by Cypress Semiconductor Corporation or one of its
-* subsidiaries ("Cypress") and is protected by and subject to worldwide
+* affiliates ("Cypress") and is protected by and subject to worldwide
 * patent protection (United States and foreign), United States copyright
 * laws and international treaty provisions. Therefore, you may use this
 * Software only as provided in the license agreement accompanying the
 * software package from which you obtained this Software ("EULA"). If
 * no EULA applies, then any reproduction, modification, translation,
-* compilation, or representation of this Software is prohibited without the
-* express written permission of Cypress.
+* compilation, or representation of this Software is prohibited without
+* the express written permission of Cypress.
 *
 * Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO
 * WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING,
@@ -36,14 +35,15 @@
 * PARTICULAR PURPOSE. Cypress reserves the right to make
 * changes to the Software without notice. Cypress does not assume any
 * liability arising out of the application or use of the Software or any
-* product or circuit described in the Software. Cypress does not
-* authorize its products for use in any products where a malfunction or
-* failure of the Cypress product may reasonably be expected to result in
-* significant property damage, injury or death ("High Risk Product"). By
-* including Cypress's product in a High Risk Product, the manufacturer
+* product or circuit described in the Software. Cypress does not authorize
+* its products for use in any products where a malfunction or failure
+* of the Cypress product may reasonably be expected to result in significant
+* property damage, injury or death ("High Risk Product").
+* By including Cypress's product in a High Risk Product, the manufacturer
 * of such system or application assumes all risk of such use and in doing
-* so agrees to indemnify Cypress against all liability
+* so agrees to indemnify Cypress against all liability.
 *****************************************************************************/
+
 #include <stdint.h>
 #include "kitprog.h"
 #include "usbinterface.h"
@@ -55,6 +55,20 @@
 
 /* USB Serial Number String Max. Length = LEN + DTYPE + 2*PREFIX + 2*NUMBER = 40 Bytes */
 #define SN_LENGTH_MAX           (0x28u)
+
+/* All USB-related interrupt bitmask */
+#define USB_INTERRUPT_MASK ( \
+    ((uint32)((uint32)1u << (0x1Fu & (USBFS_BUS_RESET_VECT_NUM)))) | \
+    ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_0_VECT_NUM)))) | \
+    ((uint32)((uint32)1u << (0x1Fu & (USBFS_SOF_VECT_NUM)))) | \
+    ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_1_VECT_NUM)))) | \
+    ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_2_VECT_NUM)))) | \
+    ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_3_VECT_NUM)))) | \
+    ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_4_VECT_NUM)))) | \
+    ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_5_VECT_NUM)))) | \
+    ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_6_VECT_NUM)))) | \
+    ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_7_VECT_NUM)))) | \
+    ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_8_VECT_NUM)))) )
 
 /******************************************************************************
 *  USBFS_HandleVendorRqst
@@ -69,10 +83,9 @@ uint8 USBFS_HandleVendorRqst(void)
 {
     uint8_t requestHandled = USBFS_FALSE;
 
-    /* MS OS Configurational Descriptor_ext fot two Vendor-Specific Interfaces */
-    /* MS OS Configurational Descriptor for Bridge Interface when device is in */
-    /* HID mode and corresponding Extended Properties Descriptors*/
-    static const uint8_t MSOS_CONFIGURATION_DESCR_EXT[0x40u] = {
+    /* MS OS Configurational Descriptor Bulk, issued only when device is in  */
+    /* bulk mode with both programming (#0) and bridge (#1) on bulk endpoints */
+    static const uint8_t MSOS_CONFIGURATION_DESCR_BULK[0x40u] = {
     /*  Length of the descriptor 4 bytes               */   0x40u, 0x00u, 0x00u, 0x00u,
     /*  Version of the descriptor 2 bytes              */   0x00u, 0x01u,
     /*  wIndex - Fixed:INDEX_CONFIG_DESCRIPTOR         */   0x04u, 0x00u,
@@ -90,7 +103,9 @@ uint8 USBFS_HandleVendorRqst(void)
     /*  Reserved                                       */   0x00u, 0x00u, 0x00u, 0x00u, 0x00u
     };
 
-    static const uint8_t MSOS_CONFIGURATION_DESCR[0x28u] = {
+    /* MS OS Configurational Descriptor Hid, issued only when device is in  */
+    /* HID mode with only bridge (#1)interface on bulk endpoints */
+    static const uint8_t MSOS_CONFIGURATION_DESCR_HID[0x28u] = {
     /*  Length of the descriptor 4 bytes               */   0x28u, 0x00u, 0x00u, 0x00u,
     /*  Version of the descriptor 2 bytes              */   0x00u, 0x01u,
     /*  wIndex - Fixed:INDEX_CONFIG_DESCRIPTOR         */   0x04u, 0x00u,
@@ -102,8 +117,24 @@ uint8 USBFS_HandleVendorRqst(void)
     /*  Secondary ID                                   */   0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
     /*  Reserved                                       */   0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
     };
+    
+    /* MS OS Configurational Descriptor Dual Uart, issued only when device is in */
+    /* dual uart mode with only programming (#0) interface on bulk endpoints     */
+    static const uint8_t MSOS_CONFIGURATION_DESCR_DUAL_UART[0x28u] = {
+    /*  Length of the descriptor 4 bytes               */   0x28u, 0x00u, 0x00u, 0x00u,
+    /*  Version of the descriptor 2 bytes              */   0x00u, 0x01u,
+    /*  wIndex - Fixed:INDEX_CONFIG_DESCRIPTOR         */   0x04u, 0x00u,
+    /*  bCount - Count of device functions.            */   0x01u,
+    /*  Reserved : 7 bytes                             */   0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
+    /*  bFirstInterfaceNumber                          */   0x00u,
+    /*  Reserved, set to 0x01                          */   0x01u,
+    /*  WINUSB ID                                      */   (uint8_t)'W', (uint8_t)'I', (uint8_t)'N', (uint8_t)'U', (uint8_t)'S', (uint8_t)'B', 0x00u, 0x00u,
+    /*  Secondary ID                                   */   0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
+    /*  Reserved                                       */   0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
+    };
 
-    static const uint8_t WINUSB_DESCR0[0x8eu] = {
+    /* WinUSB descriptor for programming (#0) interface */
+    static const uint8_t WINUSB_DESCR_ZERO_INTERFACE[0x8eu] = {
     /*  Descriptor size in bytes (142 bytes)           */   0x8Eu, 0x00u, 0x00u, 0x00u,
     /*  Descriptor version number (1.00)               */   0x00u, 0x01u,
     /*  Extended Compatible ID OS descriptor id        */   0x05u, 0x00u,
@@ -127,7 +158,8 @@ uint8 USBFS_HandleVendorRqst(void)
         (uint8_t)'6', 0u, (uint8_t)'}', 0u, 0u, 0u
     };
 
-    static const uint8_t WINUSB_DESCR1[0x8eu] = {
+    /* WinUSB descriptor for bridge (#1) interface */
+    static const uint8_t WINUSB_DESCR_FIRST_INTERFACE[0x8eu] = {
     /*  Descriptor size in bytes (142 bytes)           */   0x8Eu, 0x00u, 0x00u, 0x00u,
     /*  Descriptor version number (1.00)               */   0x00u, 0x01u,
     /*  Extended Compatible ID OS descriptor id        */   0x05u, 0x00u,
@@ -141,7 +173,7 @@ uint8 USBFS_HandleVendorRqst(void)
         (uint8_t)'a', 0u, (uint8_t)'c', 0u, (uint8_t)'e', 0u, (uint8_t)'G', 0u, (uint8_t)'U', 0u, (uint8_t)'I', 0u,
         (uint8_t)'D',0u,0u,0u,
     /*  Length of property data (78 bytes)             */   0x4eu, 0x00u, 0x00u, 0x00u,
-    /*  Vendor-defined property data: {CDB3B5AD-293B-4663-AA36-1AAE46463776} */
+    /*  Vendor-defined property data: {88BAE032-5A81-49f0-BC3D-A4FF138216D6} */
         (uint8_t)'{', 0u, (uint8_t)'8', 0u, (uint8_t)'8', 0u, (uint8_t)'B', 0u, (uint8_t)'A', 0u, (uint8_t)'E', 0u,
         (uint8_t)'0', 0u, (uint8_t)'3', 0u, (uint8_t)'2', 0u, (uint8_t)'-', 0u, (uint8_t)'5', 0u, (uint8_t)'A', 0u,
         (uint8_t)'8', 0u, (uint8_t)'1', 0u, (uint8_t)'-', 0u, (uint8_t)'4', 0u, (uint8_t)'9', 0u, (uint8_t)'F', 0u,
@@ -152,68 +184,61 @@ uint8 USBFS_HandleVendorRqst(void)
     };
     uint8_t mode = currentMode;
 
-    if ((mode == MODE_BULK) || (mode == MODE_BULK2UARTS))
+    if (0u != ((CY_GET_REG8(USBFS_bmRequestType)) & USBFS_RQST_DIR_D2H))
     {
-        if (0u != ((CY_GET_REG8(USBFS_bmRequestType)) & USBFS_RQST_DIR_D2H))
+        switch (CY_GET_REG8(USBFS_wIndexLo))
         {
-            switch (CY_GET_REG8(USBFS_wIndexLo))
+        case WCID_READ_1:
+            if (((CY_GET_REG8(USBFS_wValueLo)) == 0x00u) && 
+                ((mode == MODE_BULK) || (mode == MODE_BULK2UARTS)))
             {
-            case WCID_READ_1:
-                if ((CY_GET_REG8(USBFS_wValueLo)) == 0x00u)
-                {
-                    USBFS_currentTD.pData = (uint8_t *) &WINUSB_DESCR0[0u];
-                    USBFS_currentTD.count = WINUSB_DESCR0[0u];
-                    requestHandled  = USBFS_InitControlRead();
-                }
-                else
-                {
-                    if ((CY_GET_REG8(USBFS_wValueLo)) == 0x01u)
-                    {
-                        USBFS_currentTD.pData = (uint8_t *) &WINUSB_DESCR1[0u];
-                        USBFS_currentTD.count = WINUSB_DESCR1[0u];
-                        requestHandled  = USBFS_InitControlRead();
-                    }
-                }
-                break;
-
-            case WCID_READ_2:
-                USBFS_currentTD.pData = (uint8_t *) &MSOS_CONFIGURATION_DESCR_EXT[0u];
-                USBFS_currentTD.count = MSOS_CONFIGURATION_DESCR_EXT[0u];
+                USBFS_currentTD.pData = (uint8_t *) &WINUSB_DESCR_ZERO_INTERFACE[0u];
+                USBFS_currentTD.count = WINUSB_DESCR_ZERO_INTERFACE[0u];
                 requestHandled  = USBFS_InitControlRead();
-                break;
-
-            default:
-                requestHandled = USBFS_FALSE;
-                break;
             }
-        }
-    }
-    else
-    {
-        if (0u != ((CY_GET_REG8(USBFS_bmRequestType)) & USBFS_RQST_DIR_D2H))
-        {
-            switch (CY_GET_REG8(USBFS_wIndexLo))
+            else
             {
-            case WCID_READ_1:
                 if ((CY_GET_REG8(USBFS_wValueLo)) == 0x01u)
                 {
-                    USBFS_currentTD.pData = (uint8_t *) &WINUSB_DESCR1[0u];
-                    USBFS_currentTD.count = WINUSB_DESCR1[0u];
+                    USBFS_currentTD.pData = (uint8_t *) &WINUSB_DESCR_FIRST_INTERFACE[0u];
+                    USBFS_currentTD.count = WINUSB_DESCR_FIRST_INTERFACE[0u];
                     requestHandled  = USBFS_InitControlRead();
                 }
-                break;
-            case WCID_READ_2:
-                USBFS_currentTD.pData = (uint8_t *) &MSOS_CONFIGURATION_DESCR[0u];
-                USBFS_currentTD.count = MSOS_CONFIGURATION_DESCR[0u];
-                requestHandled  = USBFS_InitControlRead();
-                break;
-
-            default:
-                requestHandled = USBFS_FALSE;
-                break;
             }
+            break;
+
+        case WCID_READ_2:
+            if (mode == MODE_BULK) 
+            {
+                USBFS_currentTD.pData = (uint8_t *) &MSOS_CONFIGURATION_DESCR_BULK[0u];
+                USBFS_currentTD.count = MSOS_CONFIGURATION_DESCR_BULK[0u];
+                requestHandled  = USBFS_InitControlRead();
+            } 
+            else if (mode == MODE_HID)
+            {
+                USBFS_currentTD.pData = (uint8_t *) &MSOS_CONFIGURATION_DESCR_HID[0u];
+                USBFS_currentTD.count = MSOS_CONFIGURATION_DESCR_HID[0u];
+                requestHandled  = USBFS_InitControlRead();  
+            }
+            else if (mode == MODE_BULK2UARTS)
+            {
+                USBFS_currentTD.pData = (uint8_t *) &MSOS_CONFIGURATION_DESCR_DUAL_UART[0u];
+                USBFS_currentTD.count = MSOS_CONFIGURATION_DESCR_DUAL_UART[0u];
+                requestHandled  = USBFS_InitControlRead();  
+            }
+            else
+            {
+                /* Not supported mode */
+            }
+            break;
+
+        default:
+            requestHandled = USBFS_FALSE;
+            break;
         }
     }
+   
+
 
     return (requestHandled);
 }
@@ -278,13 +303,17 @@ void PrepareUsbInterface(void)
 ******************************************************************************/
 void PushToRequestBuffer(void)
 {
-    if (TryLock(&USB_RequestMutex))
+    if (TryLock(&USB_Mutex))
     {
-        if ((USBFS_GetEPAckState(CMSIS_BULK_OUT_EP) != 0u) && (!USB_RequestFlag))
+        bool cachedUsbRequestBufferFull = USB_RequestBufferFull;
+        
+        if ((USBFS_GetEPAckState(CMSIS_BULK_OUT_EP) != 0u) && (!cachedUsbRequestBufferFull))
         {
             /* ACKed transaction and buffer is not overflow */
             usbDapReadFlag = true;
+            uint32_t intrMask = CyUsbIntDisable();
             uint16_t receiveSize = USBFS_ReadOutEP(CMSIS_BULK_OUT_EP, USB_Request[USB_RequestIn], DAP_PACKET_SIZE);
+            CyUsbIntEnable(intrMask);
 
             if (receiveSize != 0u)
             {
@@ -302,7 +331,7 @@ void PushToRequestBuffer(void)
                     if (USB_RequestIn == USB_RequestOut)
                     {
                         /* Request buffer full */
-                        USB_RequestFlag = true;
+                        cachedUsbRequestBufferFull = true;
                     }
                 }
             }
@@ -318,8 +347,8 @@ void PushToRequestBuffer(void)
             /* transaction not yet ACKed or there is no free space in request buffer */
             USB_RequestPostponed = true;
         }
-
-        Unlock(&USB_RequestMutex);
+        USB_RequestBufferFull = cachedUsbRequestBufferFull;
+        Unlock(&USB_Mutex);
     }
     else
     {
@@ -336,14 +365,17 @@ void PushToRequestBuffer(void)
 ******************************************************************************/
 void PopFromResponseBuffer(void)
 {
-    if (TryLock(&USB_ResponseMutex))
+    if (TryLock(&USB_Mutex))
     {
+        bool cachedUsbRequestBufferFull = USB_RequestBufferFull;
         if (USBFS_GetEPState(CMSIS_BULK_IN_EP) == USBFS_IN_BUFFER_EMPTY)
         {
-            if ((USB_ResponseOut != USB_ResponseIn) || USB_ResponseFlag)
+            if ((USB_ResponseOut != USB_ResponseIn) || cachedUsbRequestBufferFull)
             {
                 USB_ResponseIdle = false;
+                uint32_t intrMask = CyUsbIntDisable();
                 USBFS_LoadInEP(CMSIS_BULK_IN_EP, USB_Response[USB_ResponseOut], (uint16_t)(USB_ResponseLen[USB_ResponseOut]));
+                CyUsbIntEnable(intrMask);
 
                 uint32_t n = USB_ResponseOut + 1u;
                 if (n == DAP_PACKET_COUNT)
@@ -352,10 +384,10 @@ void PopFromResponseBuffer(void)
                 }
                 USB_ResponseOut = n;
 
-                if (USB_ResponseFlag)
+                if (cachedUsbRequestBufferFull)
                 {
                     /* clear overflow flag */
-                    USB_ResponseFlag = false;
+                    cachedUsbRequestBufferFull = false;
                 }
             }
             else
@@ -374,13 +406,43 @@ void PopFromResponseBuffer(void)
             /* transaction was postponed due EP is still not empty */
             USB_ResponsePostponed = true;
         }
-        Unlock(&USB_ResponseMutex);
+        
+        USB_RequestBufferFull = cachedUsbRequestBufferFull;
+        Unlock(&USB_Mutex);
     }
     else
     {
         /* transaction was postponed due to mutex lock */
         USB_ResponsePostponed = true;
     }
+}
+
+/*******************************************************************************
+* CyUsbIntEnable
+********************************************************************************
+* Enables all USB-relates interrupts at once
+*
+* @param[in] USB interrupt bitmask for enable
+*
+*******************************************************************************/
+void CyUsbIntEnable(uint32_t intrMask)
+{
+    CY_SET_REG32(CY_INT_ENABLE_PTR, USB_INTERRUPT_MASK & intrMask);
+}
+
+/*******************************************************************************
+* CyUsbIntDisable
+********************************************************************************
+* Disables all USB-relates interrupts at once
+*
+* returns prevous enabled USB interrupt bitmap
+*
+*******************************************************************************/
+uint32_t CyUsbIntDisable(void)
+{
+    uint32_t intrMask = CY_GET_REG32(CY_INT_CLEAR_PTR) & USB_INTERRUPT_MASK;
+    CY_SET_REG32(CY_INT_CLEAR_PTR, intrMask);
+    return intrMask;
 }
 
 /* [] END OF FILE */

@@ -5,7 +5,7 @@
 *   This file contains the function prototypes and constants used in
 *   the DAP_vendor.c
 *
-* @version KitProg3 v2.21
+* @version KitProg3 v2.30
 */
 /*
 * Related Documents:
@@ -15,20 +15,19 @@
 *
 *
 ******************************************************************************
-* Copyright (2018), Cypress Semiconductor Corporation or a
-* subsidiary of Cypress Semiconductor Corporation. All rights
-* reserved.
+* (c) (2018-2021), Cypress Semiconductor Corporation (an Infineon company)
+* or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
 * owned by Cypress Semiconductor Corporation or one of its
-* subsidiaries ("Cypress") and is protected by and subject to worldwide
+* affiliates ("Cypress") and is protected by and subject to worldwide
 * patent protection (United States and foreign), United States copyright
 * laws and international treaty provisions. Therefore, you may use this
 * Software only as provided in the license agreement accompanying the
 * software package from which you obtained this Software ("EULA"). If
 * no EULA applies, then any reproduction, modification, translation,
-* compilation, or representation of this Software is prohibited without the
-* express written permission of Cypress.
+* compilation, or representation of this Software is prohibited without
+* the express written permission of Cypress.
 *
 * Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO
 * WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING,
@@ -37,13 +36,13 @@
 * PARTICULAR PURPOSE. Cypress reserves the right to make
 * changes to the Software without notice. Cypress does not assume any
 * liability arising out of the application or use of the Software or any
-* product or circuit described in the Software. Cypress does not
-* authorize its products for use in any products where a malfunction or
-* failure of the Cypress product may reasonably be expected to result in
-* significant property damage, injury or death ("High Risk Product"). By
-* including Cypress's product in a High Risk Product, the manufacturer
+* product or circuit described in the Software. Cypress does not authorize
+* its products for use in any products where a malfunction or failure
+* of the Cypress product may reasonably be expected to result in significant
+* property damage, injury or death ("High Risk Product").
+* By including Cypress's product in a High Risk Product, the manufacturer
 * of such system or application assumes all risk of such use and in doing
-* so agrees to indemnify Cypress against all liability
+* so agrees to indemnify Cypress against all liability.
 *****************************************************************************/
 
 #ifndef DAP_VENDOR_H
@@ -55,9 +54,9 @@
 #include "swd.h"
 
 
-#define KHPI_VER                            "2.02"
+#define KHPI_VER                            "2.03"
 #define KHPI_VER_MAJOR                      (2u)
-#define KHPI_VER_MINOR                      (2u)
+#define KHPI_VER_MINOR                      (3u)
 
 #define CMD_STAT_SUCCESS                    (0x00u)
 #define CMD_STAT_WAIT                       (0x01u)
@@ -127,7 +126,13 @@
 #define TIMER_CSTICK_RATE                   (800u)
 #define TIMER_CSTICK_HALF_RATE              (400u)
 #define MAX_TIMEOUT_IN_SECONDS              (30u)
-    
+
+#define PSOC5_SIID                          (0x6970122Eu)
+#define UNIQUE_ID_VALID                     (0x00u)
+#define UNIQUE_ID_INVALID                   (0xFFu)
+#define UNIQUE_ID_ADDRESS                   (CYDEV_EE_BASE + 16u)
+#define CRC8_2S_COMP_BASE                   (0x0100u)
+
 /* Enum for Basic DAP Vendor Response */
 enum
 {
@@ -141,15 +146,15 @@ enum
 {
     GENERAL_REQUEST_COMMAND = 0u,
     GENERAL_REQUEST_SUBCOMMAND = 1u,
-};    
- 
+};
+
 /* Enum for GPIO Request */
 enum
 {
     GPIO_REQUEST_COMMAND = 0u,
     GPIO_REQUEST_PIN = 1u,
     GPIO_REQUEST_STATE_MODE = 2u,
-};  
+};
 /* Function prototypes */
 void HandleReset(void);
 void HandleModeSwitch(const uint8_t *request, uint8_t *response);
@@ -159,6 +164,7 @@ uint32_t GetCapabilities(const uint8_t *request, uint8_t *response);
 uint32_t GetSetPower(const uint8_t *request, uint8_t *response);
 void WaitVendorResponse(void);
 uint32_t SetAcquireOption(const uint8_t *request, uint8_t *response);
+uint32_t GetUidData(const uint8_t *request, uint8_t *response);
 
 #endif /* DAP_VENDOR_H */
 

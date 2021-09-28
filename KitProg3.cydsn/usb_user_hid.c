@@ -10,19 +10,21 @@
  *      Copyright (c) 2004-2012 KEIL - An ARM Company. All rights reserved.
  *---------------------------------------------------------------------------*/
 /*---------------------------------------------------------------------------
- * Portions Copyright 2018, Cypress Semiconductor Corporation
- * or a subsidiary of Cypress Semiconductor Corporation. All rights
- * reserved.
- * This software, associated documentation and materials ("Software") is
+ * Portions Copyright 2018-2021, Cypress Semiconductor Corporation
+ * (an Infineon company) or an affiliate of Cypress Semiconductor Corporation.
+ * All rights reserved.
+ *
+ * This software, associated documentation and materials (“Software”) is
  * owned by Cypress Semiconductor Corporation or one of its
- * subsidiaries ("Cypress") and is protected by and subject to worldwide
+ * affiliates (“Cypress”) and is protected by and subject to worldwide
  * patent protection (United States and foreign), United States copyright
  * laws and international treaty provisions. Therefore, you may use this
  * Software only as provided in the license agreement accompanying the
- * software package from which you obtained this Software ("EULA"). If
+ * software package from which you obtained this Software (“EULA”). If
  * no EULA applies, then any reproduction, modification, translation,
  * compilation, or representation of this Software is prohibited without the
  * express written permission of Cypress.
+ *
  * Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO
  * WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING,
  * BUT NOT LIMITED TO, NONINFRINGEMENT, IMPLIED
@@ -33,10 +35,11 @@
  * product or circuit described in the Software. Cypress does not
  * authorize its products for use in any products where a malfunction or
  * failure of the Cypress product may reasonably be expected to result in
- * significant property damage, injury or death ("High Risk Product"). By
- * including Cypress's product in a High Risk Product, the manufacturer
+ * significant property damage, injury or death (“High Risk Product”). By
+ * including Cypress’s product in a High Risk Product, the manufacturer
  * of such system or application assumes all risk of such use and in doing
  * so agrees to indemnify Cypress against all liability.
+ *
  * THE CYPRESS COPYRIGHTED PORTIONS ARE NOT SUBMISSIONS AS SET FORTH IN THE
  * APACHE LICENSE VERSION 2.0 OR ANY OTHER LICENSE HAVING SIMILAR PROVISIONS.
  *---------------------------------------------------------------------------*/
@@ -51,18 +54,18 @@
 /* mask number of bytes in response (lower 16 bits) in DAP result */
 #define RESPONSE_MASK   (0x0000FFFFu)
 
-volatile bool     USB_RequestFlag;       // Request  Buffer is Full Flag
+volatile bool     USB_RequestBufferFull; // Request  Buffer is Full Flag
 volatile bool     USB_RequestPostponed;  // Request  was not transferred to the buffer
-volatile uint8_t  USB_RequestMutex;      // Request  comes in right now!
 volatile uint32_t USB_RequestIn;         // Request  Buffer In  Index / Place of next wrire
 volatile uint32_t USB_RequestOut;        // Request  Buffer Out Index / Place of next read
 
 volatile bool     USB_ResponseIdle;      // Response Buffer Idle  Flag
-volatile bool     USB_ResponseFlag;      // Response Buffer Usage Flag
+volatile bool     USB_ResponseBufferFull;// Response Buffer Usage Flag
 volatile bool     USB_ResponsePostponed; // Response was not transferred to the buffer
-volatile uint8_t  USB_ResponseMutex;     // Response goes out right now!
 volatile uint32_t USB_ResponseIn;        // Response Buffer In  Index
 volatile uint32_t USB_ResponseOut;       // Response Buffer Out Index
+
+volatile uint8_t  USB_Mutex;             // CMSIS EPs mutex
 
 uint32_t USB_ResponseLen[DAP_PACKET_COUNT];
 uint8_t  USB_Request [DAP_PACKET_COUNT][DAP_PACKET_SIZE];  // Request  Buffer
@@ -72,18 +75,17 @@ uint8_t  USB_Response[DAP_PACKET_COUNT][DAP_PACKET_SIZE];  // Response Buffer
 // USB HID Callback: when system initializes
 void usbd_hid_init(void)
 {
-    USB_RequestFlag   = false;
+    USB_RequestBufferFull   = false;
     USB_RequestIn     = 0u;
     USB_RequestOut    = 0u;
     USB_ResponseIdle  = true;
-    USB_ResponseFlag  = false;
+    USB_ResponseBufferFull  = false;
     USB_ResponseIn    = 0u;
     USB_ResponseOut   = 0u;
-    // mutexes and postponed request
-    USB_RequestMutex = MUTEX_UNLOCKED;
+    // mutex and postponed request
     USB_RequestPostponed = false;
-    USB_ResponseMutex = MUTEX_UNLOCKED;
     USB_ResponsePostponed = false;
+    USB_Mutex = MUTEX_UNLOCKED;
 }
 
 // USB HID Callback: when data needs to be prepared for the host
@@ -99,9 +101,9 @@ uint32_t usbd_hid_get_report(uint8_t rtype, uint8_t rid, uint8_t *buf, uint8_t r
             /* Init intermediate values for volatile variables USB_ResponseIn, USB_ResponseOut */
             uint32_t cachedUsbResponseOut = USB_ResponseOut;
             uint32_t cachedUsbResponseIn = USB_ResponseIn;
-            bool cachedUsbResponseFlag = USB_ResponseFlag;
+            bool cachedUsbResponseBufferFull = USB_ResponseBufferFull;
 
-            if ((cachedUsbResponseOut != cachedUsbResponseIn) || cachedUsbResponseFlag)
+            if ((cachedUsbResponseOut != cachedUsbResponseIn) || cachedUsbResponseBufferFull)
             {
                 res = USB_ResponseLen[cachedUsbResponseOut] & RESPONSE_MASK;
                 (void)memcpy(buf, USB_Response[cachedUsbResponseOut], res);
@@ -112,7 +114,7 @@ uint32_t usbd_hid_get_report(uint8_t rtype, uint8_t rid, uint8_t *buf, uint8_t r
                 }
                 if (cachedUsbResponseOut == cachedUsbResponseIn)
                 {
-                    USB_ResponseFlag = false;
+                    USB_ResponseBufferFull = false;
                 }
                 USB_ResponseOut = cachedUsbResponseOut;
             }
@@ -144,8 +146,8 @@ void usbd_hid_set_report(uint8_t rtype, uint8_t rid, uint8_t *buf, uint8_t len, 
             /* Init intermediate values for volatile variables USB_RequestIn, USB_RequestOut */
             uint32_t cachedUsbRequestIn = USB_RequestIn;
             uint32_t cachedUsbRequestOut = USB_RequestOut;
-            bool cachedUsbRequestFlag = USB_RequestFlag;
-            if (cachedUsbRequestFlag && (cachedUsbRequestIn == cachedUsbRequestOut))
+            bool cachedUsbRequestBufferFull = USB_RequestBufferFull;
+            if (cachedUsbRequestBufferFull && (cachedUsbRequestIn == cachedUsbRequestOut))
             {
                 break;  // Discard packet when buffer is full
             }
@@ -159,10 +161,10 @@ void usbd_hid_set_report(uint8_t rtype, uint8_t rid, uint8_t *buf, uint8_t len, 
             }
             if (cachedUsbRequestIn == cachedUsbRequestOut)
             {
-                cachedUsbRequestFlag = true;
+                cachedUsbRequestBufferFull = true;
             }
             USB_RequestIn = cachedUsbRequestIn;
-            USB_RequestFlag = cachedUsbRequestFlag;
+            USB_RequestBufferFull = cachedUsbRequestBufferFull;
             break;
         }
         case HID_REPORT_FEATURE:
@@ -179,13 +181,13 @@ void usbd_hid_process(void)
     /* Init intermediate values for volatile variables USB_ResponseIn, USB_ResponseOut */
     uint32_t cachedUsbResponseOut = USB_ResponseOut;
     uint32_t cachedUsbResponseIn = USB_ResponseIn;
-    bool cachedUsbResponseFlag = USB_ResponseFlag;
+    bool cachedUsbResponseBufferFull = USB_ResponseBufferFull;
     uint32_t cachedUsbRequestIn = USB_RequestIn;
     uint32_t cachedUsbRequestOut = USB_RequestOut;
-    bool cachedUsbRequestFlag = USB_RequestFlag;
+    bool cachedUsbRequestBufferFull = USB_RequestBufferFull;
 
     // Process pending requests
-    if ((!cachedUsbResponseFlag) && ((cachedUsbRequestOut != cachedUsbRequestIn) || cachedUsbRequestFlag))
+    if ((!cachedUsbResponseBufferFull) && ((cachedUsbRequestOut != cachedUsbRequestIn) || cachedUsbRequestBufferFull))
     {
 
         // Process DAP Command and prepare response
@@ -200,7 +202,7 @@ void usbd_hid_process(void)
 
         if (cachedUsbRequestOut == cachedUsbRequestIn)
         {
-            USB_RequestFlag = false;
+            USB_RequestBufferFull = false;
         }
         USB_RequestOut = cachedUsbRequestOut;
 
@@ -212,7 +214,7 @@ void usbd_hid_process(void)
         }
         if (cachedUsbResponseIn == cachedUsbResponseOut)
         {
-            USB_ResponseFlag = true;
+            USB_ResponseBufferFull = true;
         }
         USB_ResponseIn = cachedUsbResponseIn;
         USB_ResponseOut = cachedUsbResponseOut;
@@ -233,14 +235,14 @@ void usbd_bulk_process(void)
     /* Init intermediate values for volatile variables USB_ResponseIn, USB_ResponseOut */
     uint32_t cachedUsbResponseOut = USB_ResponseOut;
     uint32_t cachedUsbResponseIn = USB_ResponseIn;
-    bool cachedUsbResponseFlag = USB_ResponseFlag;
+    bool cachedUsbResponseBufferFull = USB_ResponseBufferFull;
     uint32_t cachedUsbRequestIn = USB_RequestIn;
     uint32_t cachedUsbRequestOut = USB_RequestOut;
-    bool cachedUsbRequestFlag = USB_RequestFlag;
+    bool cachedUsbRequestBufferFull = USB_RequestBufferFull;
     bool cachedUsbResponseIdle = USB_ResponseIdle;
     bool cachedUsbResponsePostponed = USB_ResponsePostponed;
     // Process pending requests
-    if ((!cachedUsbResponseFlag) && ((cachedUsbRequestOut != cachedUsbRequestIn) || cachedUsbRequestFlag))
+    if ((!cachedUsbResponseBufferFull) && ((cachedUsbRequestOut != cachedUsbRequestIn) || cachedUsbRequestBufferFull))
     {
 
         // Process DAP Command and prepare response
@@ -255,7 +257,7 @@ void usbd_bulk_process(void)
 
         if (cachedUsbRequestOut == cachedUsbRequestIn)
         {
-            cachedUsbRequestFlag = false;
+            cachedUsbRequestBufferFull = false;
         }
 
         // Update response index and flag
@@ -267,16 +269,16 @@ void usbd_bulk_process(void)
 
         if (cachedUsbResponseIn == cachedUsbResponseOut)
         {
-            cachedUsbResponseFlag = true;
+            cachedUsbResponseBufferFull = true;
         }
     }
     USB_ResponseIn = cachedUsbResponseIn;
-    USB_ResponseFlag = cachedUsbResponseFlag;
+    USB_ResponseBufferFull = cachedUsbResponseBufferFull;
 
     USB_RequestOut = cachedUsbRequestOut;
-    USB_RequestFlag = cachedUsbRequestFlag;
+    USB_RequestBufferFull = cachedUsbRequestBufferFull;
 
-    if (cachedUsbResponsePostponed || (cachedUsbResponseIdle && ((cachedUsbResponseOut != cachedUsbResponseIn) || cachedUsbResponseFlag)))
+    if (cachedUsbResponsePostponed || (cachedUsbResponseIdle && ((cachedUsbResponseOut != cachedUsbResponseIn) || cachedUsbResponseBufferFull)))
     {
         // initiate sending data back to the host, if any
         USB_ResponseIdle = false;

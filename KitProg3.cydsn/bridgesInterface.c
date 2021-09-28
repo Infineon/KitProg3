@@ -4,7 +4,7 @@
 * @brief
 *  Executable code for KitProg3
 *
-* @version KitProg3 v2.21
+* @version KitProg3 v2.30
 */
 /*
 * Related Documents:
@@ -14,20 +14,19 @@
 *
 *
 ******************************************************************************
-* Copyright (2018), Cypress Semiconductor Corporation or a
-* subsidiary of Cypress Semiconductor Corporation. All rights
-* reserved.
+* (c) (2018-2021), Cypress Semiconductor Corporation (an Infineon company)
+* or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
 * owned by Cypress Semiconductor Corporation or one of its
-* subsidiaries ("Cypress") and is protected by and subject to worldwide
+* affiliates ("Cypress") and is protected by and subject to worldwide
 * patent protection (United States and foreign), United States copyright
 * laws and international treaty provisions. Therefore, you may use this
 * Software only as provided in the license agreement accompanying the
 * software package from which you obtained this Software ("EULA"). If
 * no EULA applies, then any reproduction, modification, translation,
-* compilation, or representation of this Software is prohibited without the
-* express written permission of Cypress.
+* compilation, or representation of this Software is prohibited without
+* the express written permission of Cypress.
 *
 * Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO
 * WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING,
@@ -36,18 +35,19 @@
 * PARTICULAR PURPOSE. Cypress reserves the right to make
 * changes to the Software without notice. Cypress does not assume any
 * liability arising out of the application or use of the Software or any
-* product or circuit described in the Software. Cypress does not
-* authorize its products for use in any products where a malfunction or
-* failure of the Cypress product may reasonably be expected to result in
-* significant property damage, injury or death ("High Risk Product"). By
-* including Cypress's product in a High Risk Product, the manufacturer
+* product or circuit described in the Software. Cypress does not authorize
+* its products for use in any products where a malfunction or failure
+* of the Cypress product may reasonably be expected to result in significant
+* property damage, injury or death ("High Risk Product").
+* By including Cypress's product in a High Risk Product, the manufacturer
 * of such system or application assumes all risk of such use and in doing
-* so agrees to indemnify Cypress against all liability
+* so agrees to indemnify Cypress against all liability.
 *****************************************************************************/
+
 #include "bridgesInterface.h"
 #include "version.h"
 #include "DAP_config.h"
-#include <stdlib.h>
+#include "usbinterface.h"
 
 #define RTS_DELAY_IN_HIGH_MS     (200u)      /* 200ms */
 #define RTS_DELAY_IN_HIGH_TICK   (160u)      /* 200ms = 160 ticks at 800Hz */
@@ -89,7 +89,6 @@ static uint8_t responseIndex;
 static uint16_t waitResponseTimer = 0u;
 
 static uint8_t bufferI2c[64u];
-static uint8_t usbuartTxBuffer[2u][USBOUTPACKETSIZE];
 
 static volatile gpio_pin_t gpioState[2u] = {
     { /* GPIO Pin HWID 0x0D Port 3 Pin 5 */
@@ -109,22 +108,15 @@ static volatile gpio_pin_t gpioState[2u] = {
 };
 volatile bool gpioChanged = false;
 static const uint8_t waitResponse[DAP_PACKET_SIZE] = { [0] = ID_DAP_Vendor8, [1] = CMD_STAT_WAIT };
-static uart_bridge_t uart[2u] = {
+static const uart_bridge_t uart[2u] = {
     {
-    .usbUartInEpWriteDataPointer = USBUART1_INEP_WRITE_DATA_PTR,
-    .usbUartInEpWritePointer =     USBUART1_INEP_WRITE_PTR,
-    .usbUartInEpWriteMsbPointer = USBUART1_INEP_WRITE_MSB_PTR,
-    .usbUartInEpCount0Pointer = USBUART1_INEP_CNT0_PTR,
-    .usbUartInEpCount1Pointer = USBUART1_INEP_CNT1_PTR,
-    .usbUartInEpReadPointer = USBUART1_INEP_READ_PTR,
-    .usbUartInEpReadMsbPointer = USBUART1_INEP_READ_MSB_PTR,
-    .usbUartInEpModeRegisterPointer = USBUART1_INEP_MODE_REG_PTR,
     .uartOutEp = UART1_OUT_EP,
     .uartInEp = UART1_IN_EP,
     .uartHwErrorMask = (UART_Bridge_RX_STS_BREAK | UART_Bridge_RX_STS_PAR_ERROR | UART_Bridge_RX_STS_STOP_ERROR | UART_Bridge_RX_STS_OVERRUN),
     .uartHwFifoNotEmptyMask = UART_Bridge_RX_STS_FIFO_NOTEMPTY,
     .uartSwBufferOverflowMask = UART_Bridge_RX_STS_SOFT_BUFF_OVER,
     .uartFifoLength = UART_Bridge_FIFO_LENGTH,
+    .uartTxBufferSize = UART_Bridge_TX_BUFFER_SIZE,
     .uartRtsPinMask = UART_RTS_MASK,
     .uartRtsPinPc = UART_RTS_0,
     .uartRtsPinByp = UART_RTS__BYP,
@@ -132,9 +124,9 @@ static uart_bridge_t uart[2u] = {
     .UartClearRxBuffer = &UART_Bridge_ClearRxBuffer,
     .UartClearTxBuffer = &UART_Bridge_ClearTxBuffer,
     .UartGetRxBufferSize = &UART_Bridge_GetRxBufferSize,
-    .UartGetChar = &UART_Bridge_GetChar,
+    .UartReadRxData = &UART_Bridge_ReadRxData,
+    .UartGetTxBufferSize = &UART_Bridge_GetTxBufferSize,
     .UartPutArray = &UART_Bridge_PutArray,
-    .usbUartTx_Buffer = usbuartTxBuffer[0u],
     .UartClockGetDividerRegister = &Clock_UART_GetDividerRegister,
     .UartClockSetDividerRegister = &Clock_UART_SetDividerRegister,
     .UartClockGetSourceRegister = &Clock_UART_GetSourceRegister,
@@ -145,20 +137,13 @@ static uart_bridge_t uart[2u] = {
     .UartStop = &UART_Bridge_Stop
     },
     {
-    .usbUartInEpWriteDataPointer = USBUART2_INEP_WRITE_DATA_PTR,
-    .usbUartInEpWritePointer = USBUART2_INEP_WRITE_PTR,
-    .usbUartInEpWriteMsbPointer = USBUART2_INEP_WRITE_MSB_PTR,
-    .usbUartInEpCount0Pointer = USBUART2_INEP_CNT0_PTR,
-    .usbUartInEpCount1Pointer = USBUART2_INEP_CNT1_PTR,
-    .usbUartInEpReadPointer = USBUART2_INEP_READ_PTR,
-    .usbUartInEpReadMsbPointer = USBUART2_INEP_READ_MSB_PTR,
-    .usbUartInEpModeRegisterPointer = USBUART2_INEP_MODE_REG_PTR,
     .uartOutEp = UART2_OUT_EP,
     .uartInEp = UART2_IN_EP,
     .uartHwErrorMask = (UART_Bridge_2_RX_STS_BREAK | UART_Bridge_2_RX_STS_PAR_ERROR | UART_Bridge_2_RX_STS_STOP_ERROR | UART_Bridge_2_RX_STS_OVERRUN),
     .uartHwFifoNotEmptyMask = UART_Bridge_2_RX_STS_FIFO_NOTEMPTY,
     .uartSwBufferOverflowMask = UART_Bridge_2_RX_STS_SOFT_BUFF_OVER,
     .uartFifoLength = UART_Bridge_2_FIFO_LENGTH,
+    .uartTxBufferSize = UART_Bridge_2_TX_BUFFER_SIZE,
     .uartRtsPinMask = UART_RTS_2_MASK,
     .uartRtsPinPc = UART_RTS_2_0,
     .uartRtsPinByp = UART_RTS_2__BYP,
@@ -166,9 +151,9 @@ static uart_bridge_t uart[2u] = {
     .UartClearRxBuffer = &UART_Bridge_2_ClearRxBuffer,
     .UartClearTxBuffer = &UART_Bridge_2_ClearTxBuffer,
     .UartGetRxBufferSize = &UART_Bridge_2_GetRxBufferSize,
-    .UartGetChar = &UART_Bridge_2_GetChar,
+    .UartReadRxData = &UART_Bridge_2_ReadRxData,
+    .UartGetTxBufferSize = &UART_Bridge_2_GetTxBufferSize,
     .UartPutArray = &UART_Bridge_2_PutArray,
-    .usbUartTx_Buffer = usbuartTxBuffer[1u],
     .UartClockGetDividerRegister = &Clock_UART_2_GetDividerRegister,
     .UartClockSetDividerRegister = &Clock_UART_2_SetDividerRegister,
     .UartClockGetSourceRegister = &Clock_UART_2_GetSourceRegister,
@@ -179,6 +164,7 @@ static uart_bridge_t uart[2u] = {
     .UartStop = &UART_Bridge_2_Stop
     }
 };
+
 static uint32_t uartLastRate[2u] = {0u, 0u}; /* Last configured baud rate per UART */
 
 /******************************************************************************
@@ -212,7 +198,7 @@ static void I2c_DsiBypassEnable(void)
 ***************************************************************************//**
 * Restart try to free I2C bus from hanging devices
 *
-* @return Status, 0 fail, 1 success
+* @return True, if success
 *
 *******************************************************************************/
 static bool I2c_Restart(void)
@@ -280,17 +266,15 @@ static bool I2c_Restart(void)
 * Starts i2c transaction (read or write) in non-blocking way. Or continue
 * previously started transaction (no start/restart present in flags).
 *
-* @param[in] flags The flags of the i2c transaction.
+* @param[in] flags          Flags of the requested transaction
 *    Bits:   0       1       2       3   4   5   6   7   8
 *    Flags: start   stop    restart                     r/o
+* @param[in]  length        Length of the data to be transmitted.
+* @param[in]  commandData   The pointer to the request string.
 *
-* @param[in]  flags         Flags of the requested transaction
-* @param[in]  bLength       Length of the data to be transmitted.
-* @param[in]  bCommandData  The pointer to the request string.
-* @param[out] uint8_t       The result of starting i2c operation.
+* @return                   The result of starting i2c operation.
 *                           0   - success
 *                           !=0 - fail
-*
 ******************************************************************************/
 static uint8_t I2c_OpNonBlocking(uint8_t flags, uint8_t length, const uint8_t *commandData)
 {
@@ -516,7 +500,7 @@ static uint32_t I2c_GenericTransactionContinue(const uint8_t *request, uint8_t *
                     response[PROTOCOL_STATUS_OFFSET] = DAP_OK;
                     response[PROTOCOL_RESP_DATA_OFFSET] = 0x00;
                     num += 3U;
-                    
+
                     I2C_UDB_mstrWrBufPtr = NULL;
 
                     stateI2cOp = STATE_I2C_READY;
@@ -526,7 +510,7 @@ static uint32_t I2c_GenericTransactionContinue(const uint8_t *request, uint8_t *
                     response[PROTOCOL_CMD_OFFSET] = ID_DAP_Vendor8;
                     response[PROTOCOL_STATUS_OFFSET] = DAP_OK;
                     num += 2u;
-                    
+
                     if (addrWasSent == true)
                     {
                         response[PROTOCOL_RESP_DATA_OFFSET] = 0x00u;
@@ -583,10 +567,10 @@ static void I2c_CheckForResponse(const uint8_t *request, uint8_t *response)
         {
             uint8_t immBridgeRequest[BRIDGE_INTERFACE_ENDP_SIZE];
             uint8_t immBridgeResponse[BRIDGE_INTERFACE_ENDP_SIZE];
-            uint8_t interSettings = CyEnterCriticalSection();
 
+            uint32_t intrMask = CyUsbIntDisable();
             (void)USBFS_ReadOutEP(BRIDGE_INTERFACE_OUT_ENDP, immBridgeRequest, receiveSize);
-            CyExitCriticalSection(interSettings);
+            CyUsbIntEnable(intrMask);
 
             /* Only valid command during active I2C transaction is I2C master restart that
              * allows to interrupt current operation and restart I2C master */
@@ -606,7 +590,9 @@ static void I2c_CheckForResponse(const uint8_t *request, uint8_t *response)
                 immBridgeResponse[PROTOCOL_CMD_OFFSET] = CMD_INVALID;
             }
 
+            intrMask = CyUsbIntDisable();
             USBFS_LoadInEP(BRIDGE_INTERFACE_IN_ENDP, immBridgeResponse, BRIDGE_INTERFACE_ENDP_SIZE);
+            CyUsbIntEnable(intrMask);
         }
     }
  }
@@ -619,13 +605,9 @@ static void I2c_CheckForResponse(const uint8_t *request, uint8_t *response)
 * @param[in] flags The pointer to the variable for I2C transaction to be set.
 * At the start it is expected for it to contain not decoded data.
 *
-* @param[in] request The pointer to the memory that contains original host
-* request
+* @param[in] request The pointer to the memory that contains original host request
 *
-* @param[in] response The pointer to the memory that will be used for storing
-*   the response.
-*
-* @return If the request was decoded.
+* @return True, if the request was decoded.
 *
 ******************************************************************************/
 static bool I2c_ParseCommand(uint8_t *flags, const uint8_t *request)
@@ -811,9 +793,10 @@ static uint32_t I2c_SetSpeed(const uint8_t *request, uint8_t *response)
 *
 * @param[in] request The pointer to the request string.
 *
-* @param[in] request The pointer to the memory that will be used for storing
+* @param[out] response The pointer to the memory that will be used for storing
 *   the response.
-* returns (num of bytes in request << 16) | (num of bytes in response)
+*
+* @return (num of bytes in request << 16) | (num of bytes in response)
 *
 ******************************************************************************/
 static uint32_t Spi_SetSpeed(const uint8_t *request, uint8_t *response)
@@ -874,14 +857,11 @@ static uint32_t Spi_SetSpeed(const uint8_t *request, uint8_t *response)
 ***************************************************************************//**
 * Executes an generic SPI transaction.
 *
-* @param[in] bControl Byte Control byte
-*
-* @param[in] bLength Data length
-*
-* @param[in] bCommandData Pointer to command data buffer
-*
-* @param[in] bReturnData Pointer to return data buffer
-* @param[in] bSS_mode Selected slave device:
+* @param[in]  controlByte Byte Control byte
+* @param[in]  length      Data length
+* @param[in]  commandData Pointer to command data buffer
+* @param[out] returnData  Pointer to return data buffer
+* @param[in]  SS_mode Selected slave device:
 *                           0x01  -  P15_3
 *                           0x02  -  P3_4
 *                           0x04  -  P3_6
@@ -933,9 +913,8 @@ static void Spi_GenericTransaction(uint8_t controlByte, uint8_t length, const ui
 ***************************************************************************//**
 * Handles the Set or Get Speed I2C/SPI Vendor request
 *
-* @param[in] request The pointer to the request string.
-*
-* @param[in] request The pointer to the memory that will be used for storing
+* @param[in] request   The pointer to the request string.
+* @param[out] response The pointer to the memory that will be used for storing
 *   the response for the last packet.
 * returns (num of bytes in request << 16) | (num of bytes in response)
 *
@@ -1041,7 +1020,9 @@ void Bridge_InterfaceHandler(void)
             if ((waitResponseTimer - Timer_CSTick_ReadCounter()) >= (uint16_t)TIMER_CSTICK_RATE)
             {
                 waitResponseTimer = Timer_CSTick_ReadCounter();
+                uint32_t intrMask = CyUsbIntDisable();
                 USBFS_LoadInEP(BRIDGE_INTERFACE_IN_ENDP, waitResponse, BRIDGE_INTERFACE_ENDP_SIZE);
+                CyUsbIntEnable(intrMask);
             }
             /*  Check if any response is sent from slave device */
             I2c_CheckForResponse(&bridgeRequest[requestIndex], &bridgeResponse[responseIndex]);
@@ -1068,9 +1049,10 @@ void Bridge_InterfaceHandler(void)
                             uint16_t receiveSize = USBFS_GetEPCount(BRIDGE_INTERFACE_OUT_ENDP);
                             if (receiveSize > 0u)
                             {
-                                uint8_t interSettings = CyEnterCriticalSection();
+                                uint32_t intrMask = CyUsbIntDisable();
                                 (void)USBFS_ReadOutEP(BRIDGE_INTERFACE_OUT_ENDP, bridgeRequest, receiveSize);
-                                CyExitCriticalSection(interSettings);
+                                CyUsbIntEnable(intrMask);
+
                                 /* init variables for request handling */
                                 initCommand = true;
                                 requestIndex = 0u;
@@ -1085,7 +1067,11 @@ void Bridge_InterfaceHandler(void)
 
                         /* Send response if there are any to send */
                         /* normal Response for other commands send to bridge if i2c transaction not started */
-                        USBFS_LoadInEP(BRIDGE_INTERFACE_IN_ENDP, bridgeResponse, BRIDGE_INTERFACE_ENDP_SIZE);
+                        {
+                            uint32_t intrMask = CyUsbIntDisable();
+                            USBFS_LoadInEP(BRIDGE_INTERFACE_IN_ENDP, bridgeResponse, BRIDGE_INTERFACE_ENDP_SIZE);
+                            CyUsbIntEnable(intrMask);
+                        }
                         commandExecution = NOTHING_TO_HANDLE;
                         break;
 
@@ -1170,7 +1156,7 @@ void Bridge_ExecuteCommands(void)
 * transaction
 * @param[in] request The pointer to the request string.
 *
-* @param[in] request The pointer to the memory that will be used for storing
+* @param[out] response The pointer to the memory that will be used for storing
 *   the response for the last packet.
 *
 * returns (num of bytes in request << 16) | (num of bytes in response)
@@ -1230,7 +1216,9 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
                 {
                     stateI2cOp = STATE_I2C_RW_STARTED;
 
+                    uint32_t intrMask = CyUsbIntDisable();
                     USBFS_LoadInEP(BRIDGE_INTERFACE_IN_ENDP, waitResponse, BRIDGE_INTERFACE_ENDP_SIZE);
+                    CyUsbIntEnable(intrMask);
                     waitResponseTimer = Timer_CSTick_ReadCounter();
 
                 }
@@ -1238,7 +1226,9 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
                 {
                     static const uint8_t failOpResponce[BRIDGE_INTERFACE_ENDP_SIZE] = {[0] = CMD_ID_I2C_TRANSACTION, [1] = CMD_STAT_FAIL_OP_FAIL};
                     /* Fail Responses*/
+                    uint32_t intrMask = CyUsbIntDisable();
                     USBFS_LoadInEP(BRIDGE_INTERFACE_IN_ENDP, failOpResponce, BRIDGE_INTERFACE_ENDP_SIZE);
+                    CyUsbIntEnable(intrMask);
                     commandExecution = NOTHING_TO_HANDLE;
                 }
                 num = ((((uint32_t)request[PROTOCOL_LENGTH_OFFSET]) + 4UL) << 16U);
@@ -1297,7 +1287,7 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
         else
         {
             response[PROTOCOL_CMD_OFFSET] = ID_DAP_Invalid;
-            num += ((1UL << 16) | 1UL);   
+            num += ((1UL << 16) | 1UL);
         }
         break;
     case ID_DAP_Vendor12:
@@ -1310,7 +1300,7 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
         else
         {
             response[PROTOCOL_CMD_OFFSET] = ID_DAP_Invalid;
-            num += ((1UL << 16) | 1UL); 
+            num += ((1UL << 16) | 1UL);
         }
         break;
     case ID_DAP_Vendor13:
@@ -1323,7 +1313,7 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
         else
         {
             response[PROTOCOL_CMD_OFFSET] = ID_DAP_Invalid;
-            num += ((1UL << 16) | 1UL); 
+            num += ((1UL << 16) | 1UL);
         }
         break;
     case ID_DAP_Vendor16:
@@ -1474,26 +1464,26 @@ static void UsbUartRtsEventHandler(uint8_t comPort, uint8_t eventType, bool asse
 static uint16_t UsbUartCalculateDivider(uint32_t dteRate, uint8_t * clockSource)
 {
     uint16_t divider;
-    
+
     /* Limit max and min values of dteRate */
     uint32_t rate = (dteRate < 50u) ? 50u : ((dteRate > 4000000u) ? 4000000u : dteRate);
-    
+
     /* Calculate needed dividers for PLL clock to achieve dteRate */
     uint32_t normValue = UART_Bridge_OVER_SAMPLE_COUNT*rate;
     uint32_t dividerPll = ((SOURCECLK)/normValue);
-    
+
     /* Multiply by two to omit division */
     if ((2u*((SOURCECLK)%(normValue))) >= normValue)
     {
         dividerPll++;
     }
-    
+
     uint32_t ratePll = ((SOURCECLK)/(UART_Bridge_OVER_SAMPLE_COUNT*dividerPll));
-    
+
     /* Do not calculate divider for IMO if requested rate is too high */
     if (rate > MAX_IMO_RATE)
     {
-        *clockSource = CYCLK_SRC_SEL_PLL; 
+        *clockSource = CYCLK_SRC_SEL_PLL;
         divider =  (uint16_t)dividerPll;
         rate = ratePll;
     }
@@ -1504,18 +1494,18 @@ static uint16_t UsbUartCalculateDivider(uint32_t dteRate, uint8_t * clockSource)
         {
             dividerImo++;
         }
-        
+
         /* Get actual rate with calculated dividers */
         uint32_t rateImo = ((SOURCECLK_IMO)/(UART_Bridge_OVER_SAMPLE_COUNT*dividerImo));
-    
+
         /* Calculate difference between requested and actual rates */
-        uint32_t diffPll = (dteRate - ratePll)%rate;
-        uint32_t diffImo = (dteRate - rateImo)%rate;
+        uint32_t diffPll = ((dteRate >= ratePll) ? (dteRate - ratePll) : (ratePll - dteRate)) % dteRate;
+        uint32_t diffImo = ((dteRate >= rateImo) ? (dteRate - rateImo) : (rateImo - dteRate)) % dteRate;
 
         /* If use of either Clock Source is possible or PLL option is preferred*/
         if ((diffPll == diffImo) || (diffPll < diffImo))
         {
-            *clockSource = CYCLK_SRC_SEL_PLL; 
+            *clockSource = CYCLK_SRC_SEL_PLL;
             divider =  (uint16_t)dividerPll;
             rate = ratePll;
         }
@@ -1526,15 +1516,8 @@ static uint16_t UsbUartCalculateDivider(uint32_t dteRate, uint8_t * clockSource)
             rate = rateImo;
         }
     }
-    
+
     uint8_t portNr = USBFS_GetComPort();
-
-    /* Update COM port structure with real rate */ 
-    USBFS_linesCoding[portNr][USBFS_LINE_CODING_RATE] = LO8(LO16(rate));
-    USBFS_linesCoding[portNr][USBFS_LINE_CODING_RATE + 1u] = HI8(LO16(rate));
-    USBFS_linesCoding[portNr][USBFS_LINE_CODING_RATE + 2u] = LO8(HI16(rate));
-    USBFS_linesCoding[portNr][USBFS_LINE_CODING_RATE + 3u] = HI8(HI16(rate));
-
     /* keep real data rate */
     uartLastRate[portNr] = rate;
 
@@ -1546,18 +1529,18 @@ static uint16_t UsbUartCalculateDivider(uint32_t dteRate, uint8_t * clockSource)
 ********************************************************************************
 * Sets Source Clock and Divider value for UART
 *******************************************************************************/
-static void UsbUartSetClock(void) 
+static void UsbUartSetClock(void)
 {
     uint8_t mode = currentMode;
     uint8_t portNr = USBFS_GetComPort();
     const uart_bridge_t *port = (portNr == 0u) ? &uart[0u] :
-                                (((portNr == 1u) && 
+                                (((portNr == 1u) &&
                                 (mode == MODE_BULK2UARTS)) ? &uart[1u] : (void *)0);
     if (port != (void *)0)
     {
         uint8_t clockSample;
 
-        /* Get Baud Rate */
+        /* Get requested baud rate */
         uint32_t dteRate = USBFS_GetDTERate();
         static uint32_t uartLastDteRate[2u] = {0u, 0u}; /* Last requested DTE Rate per UART*/
         if (dteRate != uartLastDteRate[portNr])
@@ -1595,16 +1578,14 @@ static void UsbUartSetClock(void)
                 port->UartStart();
             }
         }
-        else
-        {
-            /* Get the last set real baud rate */
-            uint32_t rate = uartLastRate[portNr];
-            /* Update COM port structure with real rate */ 
-            USBFS_linesCoding[portNr][USBFS_LINE_CODING_RATE] = LO8(LO16(rate));
-            USBFS_linesCoding[portNr][USBFS_LINE_CODING_RATE + 1u] = HI8(LO16(rate));
-            USBFS_linesCoding[portNr][USBFS_LINE_CODING_RATE + 2u] = LO8(HI16(rate));
-            USBFS_linesCoding[portNr][USBFS_LINE_CODING_RATE + 3u] = HI8(HI16(rate));
-        }
+
+        /* Get UART's real baud rate last set */
+        uint32_t rate = uartLastRate[portNr];
+        /* Update COM port structure with real rate */
+        USBFS_linesCoding[portNr][USBFS_LINE_CODING_RATE] = LO8(LO16(rate));
+        USBFS_linesCoding[portNr][USBFS_LINE_CODING_RATE + 1u] = HI8(LO16(rate));
+        USBFS_linesCoding[portNr][USBFS_LINE_CODING_RATE + 2u] = LO8(HI16(rate));
+        USBFS_linesCoding[portNr][USBFS_LINE_CODING_RATE + 3u] = HI8(HI16(rate));
     }
 }
 
@@ -1617,7 +1598,11 @@ static void UsbUartSetClock(void)
 *******************************************************************************/
 static void UsbUartCheckLine(void)
 {
+    /* PROGTOOLS-2894: Call USBFS_IsLineChanged inside a critical section
+       to avoid changing USBFS_transferState from idle state while executed */
+    uint8_t enableInterrupts = CyEnterCriticalSection();
     uint8_t lineChangedState = USBFS_IsLineChanged();
+    CyExitCriticalSection(enableInterrupts);
     if((lineChangedState & USBFS_LINE_CONTROL_CHANGED) != 0u)
     {
         if (KitHasSpecialRts())
@@ -1638,7 +1623,6 @@ static void UsbUartCheckLine(void)
                     /* RTS was requested to force off */
                     UsbUartRtsEventHandler(comPort, RTS_FLAG_USBUART_RTS, true);
                 }
-
             }
             else
             {
@@ -1672,13 +1656,22 @@ static void UsbUartTransmit(uint8_t comPort)
             /* Get size of packet */
             uint16_t size = USBFS_GetEPCount(port->uartOutEp);
 
-            /* Read from USB Buffer */
-            uint8_t interSettings = CyEnterCriticalSection();
-            (void)USBFS_ReadOutEP(port->uartOutEp, port->usbUartTx_Buffer, size);
-            CyExitCriticalSection(interSettings);
+            /* Get available UART buffer size */
+            uint16_t uartBufferAvailable = port->uartTxBufferSize - port->UartGetTxBufferSize();
 
-            /* Send to UART Tx */
-            port->UartPutArray(port->usbUartTx_Buffer, size);
+            /* Load data from endpoint only if the required space is available in the UART buffer */
+            if (uartBufferAvailable >= size)
+            {
+                /* Read from USB Buffer */
+                static uint8_t usbuartTxBuffer[USBOUTPACKETSIZE];
+
+                uint32_t intrMask = CyUsbIntDisable();
+                (void)USBFS_ReadOutEP(port->uartOutEp, usbuartTxBuffer, size);
+                CyUsbIntEnable(intrMask);
+
+                /* Send to UART Tx */
+                port->UartPutArray(usbuartTxBuffer, size);
+            }
         }
     }
 }
@@ -1698,8 +1691,6 @@ static void UsbUartReceive(uint8_t comPort)
 
         if (USBFS_bGetEPState(port->uartInEp) == USBFS_IN_BUFFER_EMPTY)
         {
-            uint32_t wCount;
-
             uint8_t rxStatus = port->UartReadRxStatus();
 
             /* Check status of UART_RX_STS_SOFT_BUFF_OVER */
@@ -1707,57 +1698,66 @@ static void UsbUartReceive(uint8_t comPort)
                 port->UartClearRxBuffer();
             }
 
-            wCount = port->UartGetRxBufferSize();
-            wCount = (wCount < USBINPACKETSIZE) ? wCount : USBINPACKETSIZE;
+            uint16_t wCount = port->UartGetRxBufferSize();
+            if (wCount > USBINPACKETSIZE)
+            {
+                wCount = USBINPACKETSIZE;
+            }
 
             if(wCount == 0u)
             {
                 if((rxStatus & port->uartHwErrorMask) != 0u)
                 {
                     /* will clear HW FIFO if HWError occured */
-                    for(uint32_t cnt = 0; cnt < port->uartFifoLength; cnt++ )
+                    for(uint8_t cnt = 0; cnt < port->uartFifoLength; cnt++ )
                     {
-                        (void)port->UartGetChar();
-                    }
-                }
-                else
-                {
-                    if ((rxStatus & port->uartHwFifoNotEmptyMask) != 0u)
-                    {
-                        /* at least one byte can be read */
-                        wCount = 1u;
+                        (void)port->UartReadRxData();
                     }
                 }
             }
 
-            /* Check if Rx has data */
+            /* Check if Rx has data then populate buffer */
+            static uint8_t usbuartRxBuffer[USBINPACKETSIZE];
             if(wCount != 0u)
             {
-                for(uint32_t index = 0; index < wCount; index++){
-
-                    /* Load from UART RX Buffer to USB */
-                    CY_SET_REG8(port->usbUartInEpWriteDataPointer, port->UartGetChar());
+                /* Load from software UART RX Buffer */
+                for(uint16_t index = 0; index < wCount; index++){
+                    usbuartRxBuffer[index] = port->UartReadRxData();
                 }
-
-                /* Send out data */
+            }
+            else
+            {
+                /* Try to load data from HW FIFO if it is not empty */
+                rxStatus = port->UartReadRxStatus();
+                uint8_t interSettings;
+                while ( ((rxStatus & port->uartHwFifoNotEmptyMask) != 0u) && (wCount < USBINPACKETSIZE) )
                 {
-                    /* Write WAx */
-                    CY_SET_REG8(port->usbUartInEpWritePointer,     USBFS_EP[port->uartInEp].buffOffset & 0xFFu);
-                    CY_SET_REG8(port->usbUartInEpWriteMsbPointer, (USBFS_EP[port->uartInEp].buffOffset >> 8u));
-
-                    /* Set the count and data toggle */
-                    CY_SET_REG8(port->usbUartInEpCount0Pointer, (wCount >> 8u) | (USBFS_EP[port->uartInEp].epToggle));
-                    CY_SET_REG8(port->usbUartInEpCount1Pointer,  wCount & 0xFFu);
-
-                    /* Write the RAx */
-                    CY_SET_REG8(port->usbUartInEpReadPointer,     USBFS_EP[port->uartInEp].buffOffset & 0xFFu);
-                    CY_SET_REG8(port->usbUartInEpReadMsbPointer, (USBFS_EP[port->uartInEp].buffOffset >> 8u));
-
-                    USBFS_EP[port->uartInEp].apiEpState = USBFS_NO_EVENT_PENDING;
-
-                    /* Write the Mode register */
-                    CY_SET_REG8(port->usbUartInEpModeRegisterPointer, USBFS_EP[port->uartInEp].epMode);
+                    if (wCount == 0u)
+                    {
+                        interSettings = CyEnterCriticalSection();
+                    }
+                    /* at least one byte can be read */
+                    usbuartRxBuffer[wCount] = port->UartReadRxData();
+                    wCount++;
+                    /* refresh the current state of the receiver status register */
+                    rxStatus = port->UartReadRxStatus();
                 }
+                if (wCount != 0u)
+                {
+                    CyExitCriticalSection(interSettings);
+                }
+            }
+
+            static uint16_t uartInEpLastSent[2u] = {0u, 0u}; /* The last sent size is required for the ZLP generation logic */
+
+            if ( (wCount != 0u) || (uartInEpLastSent[comPort] == USBINPACKETSIZE) ) 
+            {
+                /* Send out data */
+                uint32_t intrMask = CyUsbIntDisable();
+                USBFS_LoadInEP(port->uartInEp, usbuartRxBuffer, wCount);
+                CyUsbIntEnable(intrMask);
+
+                uartInEpLastSent[comPort] = wCount;
             }
         }
     }
@@ -2024,10 +2024,10 @@ static void UpdateGpioState(gpio_pin_t volatile * gpioPin)
 /******************************************************************************
 *  Bridge_GpioSetMode
 ***************************************************************************//**
-* Sets Drive Mode of one GPIO Pin at the time 
+* Sets Drive Mode of one GPIO Pin at the time
 * @param[in] request The pointer to the request string.
 *
-* @param[in] request The pointer to the memory that will be used for storing
+* @param[out] response The pointer to the memory that will be used for storing
 *   the response for the last packet.
 *
 * returns (num of bytes in request << 16) | (num of bytes in response)
@@ -2035,7 +2035,7 @@ static void UpdateGpioState(gpio_pin_t volatile * gpioPin)
 uint32_t Bridge_GpioSetMode(const uint8_t * request, uint8_t *response)
 {
     uint32_t retVal = 0u;
-    
+
     /* Enum for supported GPIO drive modes */
     enum {
         HIZ = 0x00,
@@ -2046,24 +2046,24 @@ uint32_t Bridge_GpioSetMode(const uint8_t * request, uint8_t *response)
         DM_STR,
         RES_UPDWN
     };
-    
+
     const uint8_t modes[7u] =
     {
-        [HIZ] = PIN_DM_DIG_HIZ, 
-        [RES_UP] = PIN_DM_RES_UP, 
+        [HIZ] = PIN_DM_DIG_HIZ,
+        [RES_UP] = PIN_DM_RES_UP,
         [RES_DWN] = PIN_DM_RES_DWN,
-        [ODLO] = PIN_DM_OD_LO, 
-        [ODHI] = PIN_DM_OD_HI, 
-        [DM_STR] = PIN_DM_STRONG, 
-        [RES_UPDWN] = PIN_DM_RES_UPDWN   
+        [ODLO] = PIN_DM_OD_LO,
+        [ODHI] = PIN_DM_OD_HI,
+        [DM_STR] = PIN_DM_STRONG,
+        [RES_UPDWN] = PIN_DM_RES_UPDWN
     };
     bool modeIsValid = false;
     uint8_t desiredMode;
-    
+
     /* Get pin number and desired mode from request buffer*/
     uint8_t pin = request[GPIO_REQUEST_PIN];
     uint8_t mode = request[GPIO_REQUEST_STATE_MODE];
-    
+
     for(int8_t index = HIZ; index <= RES_UPDWN; index++)
     {
         if (mode == (uint8_t)index)
@@ -2072,7 +2072,7 @@ uint32_t Bridge_GpioSetMode(const uint8_t * request, uint8_t *response)
             modeIsValid = true;
         }
     }
-    const volatile gpio_pin_t *curPin = ((pin == gpioState[0].pin) ? &gpioState[0] : 
+    const volatile gpio_pin_t *curPin = ((pin == gpioState[0].pin) ? &gpioState[0] :
                                 ((pin == gpioState[1].pin) ? &gpioState[1] :
                                 (void *)0));
     bool valid = (curPin != (void *)0) ? true: false;
@@ -2080,8 +2080,8 @@ uint32_t Bridge_GpioSetMode(const uint8_t * request, uint8_t *response)
     {
         CyPins_SetPinDriveMode((reg8 *)curPin->pinReg, desiredMode);
         uint8_t curMode = CyPins_ReadPinDriveMode((reg8 *)curPin->pinReg);
-        
-        response[GENERAL_RESPONSE_STATUS] = (curMode == desiredMode) ? DAP_OK : DAP_ERROR;             
+
+        response[GENERAL_RESPONSE_STATUS] = (curMode == desiredMode) ? DAP_OK : DAP_ERROR;
     }
     else
     {
@@ -2097,7 +2097,7 @@ uint32_t Bridge_GpioSetMode(const uint8_t * request, uint8_t *response)
 * Sets state of one GPIO Pin at the time
 * @param[in] request The pointer to the request string.
 *
-* @param[in] request The pointer to the memory that will be used for storing
+* @param[out] response The pointer to the memory that will be used for storing
 *   the response for the last packet.
 *
 * returns (num of bytes in request << 16) | (num of bytes in response)
@@ -2105,16 +2105,16 @@ uint32_t Bridge_GpioSetMode(const uint8_t * request, uint8_t *response)
 uint32_t Bridge_GpioSetState(const uint8_t * request, uint8_t *response)
 {
     uint32_t retVal = 0u;
-    
+
     /* Get pin number and desired state from request buffer*/
     uint8_t pin = request[GPIO_REQUEST_PIN];
     uint8_t state = request[GPIO_REQUEST_STATE_MODE];
 
-    gpio_pin_t volatile *curPin = ((pin == gpioState[0].pin) ? &gpioState[0] : 
+    gpio_pin_t volatile *curPin = ((pin == gpioState[0].pin) ? &gpioState[0] :
                             ((pin == gpioState[1].pin) ? &gpioState[1] :
                             (void *)0));
     bool valid = (curPin != (void *)0) ? true : false;
-    
+
     if (valid)
     {
         if (state == GPIO_CLEAR_STATE)
@@ -2129,7 +2129,7 @@ uint32_t Bridge_GpioSetState(const uint8_t * request, uint8_t *response)
         curPin->previousState = curPin->currentState;
         uint8_t curState = (CyPins_ReadPin((reg8 *)curPin->pinReg) != 0u) ? 1u : 0u;
         curPin->currentState = curState;
-        
+
         /* Form Response */
         response[GENERAL_RESPONSE_STATUS] = (curState == state) ? DAP_OK : DAP_ERROR;
         gpioChanged = false;
@@ -2138,7 +2138,7 @@ uint32_t Bridge_GpioSetState(const uint8_t * request, uint8_t *response)
     {
         response[GENERAL_RESPONSE_STATUS] = CMD_STAT_FAIL_INV_PAR;
     }
-    
+
     retVal += ((3UL << 16) | 2UL);
     return (retVal);
 }
@@ -2149,23 +2149,23 @@ uint32_t Bridge_GpioSetState(const uint8_t * request, uint8_t *response)
 * Reads current state of one GPIO Pin at the time and returns it
 * @param[in] request The pointer to the request string.
 *
-* @param[in] request The pointer to the memory that will be used for storing
+* @param[out] response The pointer to the memory that will be used for storing
 *   the response for the last packet.
 *
 * returns (num of bytes in request << 16) | (num of bytes in response)
 *******************************************************************************/
 uint32_t Bridge_GpioReadState(const uint8_t * request, uint8_t *response)
 {
-    uint32_t retVal = 0u;   
-    
+    uint32_t retVal = 0u;
+
     /* Get pin number from request */
     uint8_t pin = request[GPIO_REQUEST_PIN];
-    
-    const volatile gpio_pin_t *curPin = ((pin == gpioState[0].pin) ? &gpioState[0] : 
+
+    const volatile gpio_pin_t *curPin = ((pin == gpioState[0].pin) ? &gpioState[0] :
                             ((pin == gpioState[1].pin) ? &gpioState[1] :
                             (void *)0));
     bool valid = (curPin != (void *)0) ? true : false;
-    
+
     if (valid)
     {
         response[GENERAL_RESPONSE_STATUS] = DAP_OK;
@@ -2188,19 +2188,19 @@ uint32_t Bridge_GpioReadState(const uint8_t * request, uint8_t *response)
 * whether it has changed
 * @param[in] request The pointer to the request string.
 *
-* @param[in] request The pointer to the memory that will be used for storing
+* @param[out] response The pointer to the memory that will be used for storing
 *   the response for the last packet.
 *
 * returns (num of bytes in request << 16) | (num of bytes in response)
 *******************************************************************************/
 uint32_t Bridge_GpioStateChanged(const uint8_t * request, uint8_t *response)
 {
-    uint32_t retVal = 0u;   
-    
+    uint32_t retVal = 0u;
+
     /* Get pin number from request */
     uint8_t pin = request[GPIO_REQUEST_PIN];
-    
-    gpio_pin_t volatile *curPin = ((pin == gpioState[0].pin) ? &gpioState[0] : 
+
+    gpio_pin_t volatile *curPin = ((pin == gpioState[0].pin) ? &gpioState[0] :
                             ((pin == gpioState[1].pin) ? &gpioState[1] :
                             (void *)0));
     bool valid = (curPin != (void *)0) ? true : false;
@@ -2210,7 +2210,7 @@ uint32_t Bridge_GpioStateChanged(const uint8_t * request, uint8_t *response)
         uint8_t stateChange = curPin->change;
         gpioChanged = false;
 
-        /* Form response */ 
+        /* Form response */
         response[GENERAL_RESPONSE_STATUS] = DAP_OK;
         response[GENERAL_RESPONSE_RESULT] = stateChange;
         retVal += (2UL << 16) | 3UL;
@@ -2236,7 +2236,7 @@ void GPIO_isr_Interrupt_InterruptCallback(void)
     /* Clear interrupt source */
     (void)GPIO_ClearInterrupt();
     /* Update current state of GPIO pins */
-    gpioState[0].currentState = (CyPins_ReadPin((reg8 *)gpioState[0].pinReg) != 0u) ? 1u : 0u; 
-    gpioState[1].currentState = (CyPins_ReadPin((reg8 *)gpioState[1].pinReg) != 0u) ? 1u : 0u; 
+    gpioState[0].currentState = (CyPins_ReadPin((reg8 *)gpioState[0].pinReg) != 0u) ? 1u : 0u;
+    gpioState[1].currentState = (CyPins_ReadPin((reg8 *)gpioState[1].pinReg) != 0u) ? 1u : 0u;
 }
 /* [] END OF FILE */

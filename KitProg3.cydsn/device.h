@@ -10,6 +10,7 @@
 * disclaimers, and limitations in the end user license agreement accompanying
 * the software package with which this file was provided.
 *******************************************************************************/
+
 #ifndef DEVICE_H
 #define DEVICE_H
 #include <project.h>

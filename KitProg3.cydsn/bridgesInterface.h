@@ -5,7 +5,7 @@
 *   This file contains the function prototypes, macros and constants used
 *    in bridgesInterface.c file.
 *
-* @version KitProg3 v2.21
+* @version KitProg3 v2.30
 */
 /*
 * Related Documents:
@@ -15,20 +15,19 @@
 *
 *
 ******************************************************************************
-* Copyright (2018), Cypress Semiconductor Corporation or a
-* subsidiary of Cypress Semiconductor Corporation. All rights
-* reserved.
+* (c) (2018-2021), Cypress Semiconductor Corporation (an Infineon company)
+* or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
 * owned by Cypress Semiconductor Corporation or one of its
-* subsidiaries ("Cypress") and is protected by and subject to worldwide
+* affiliates ("Cypress") and is protected by and subject to worldwide
 * patent protection (United States and foreign), United States copyright
 * laws and international treaty provisions. Therefore, you may use this
 * Software only as provided in the license agreement accompanying the
 * software package from which you obtained this Software ("EULA"). If
 * no EULA applies, then any reproduction, modification, translation,
-* compilation, or representation of this Software is prohibited without the
-* express written permission of Cypress.
+* compilation, or representation of this Software is prohibited without
+* the express written permission of Cypress.
 *
 * Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO
 * WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING,
@@ -37,14 +36,15 @@
 * PARTICULAR PURPOSE. Cypress reserves the right to make
 * changes to the Software without notice. Cypress does not assume any
 * liability arising out of the application or use of the Software or any
-* product or circuit described in the Software. Cypress does not
-* authorize its products for use in any products where a malfunction or
-* failure of the Cypress product may reasonably be expected to result in
-* significant property damage, injury or death ("High Risk Product"). By
-* including Cypress's product in a High Risk Product, the manufacturer
+* product or circuit described in the Software. Cypress does not authorize
+* its products for use in any products where a malfunction or failure
+* of the Cypress product may reasonably be expected to result in significant
+* property damage, injury or death ("High Risk Product").
+* By including Cypress's product in a High Risk Product, the manufacturer
 * of such system or application assumes all risk of such use and in doing
-* so agrees to indemnify Cypress against all liability
+* so agrees to indemnify Cypress against all liability.
 *****************************************************************************/
+
 #if !defined(BRIDGESINTERFACE_H)
 #define BRIDGESINTERFACE_H
 
@@ -187,6 +187,7 @@
 #define PROTOCOL_DUT_OFSET              (0x01u)
 #define PROTOCOL_MODE_OFSET             (0x02u)
 #define PROTOCOL_N_OFSET                (0x03u)
+#define PROTOCOL_CUSTOM_SEQ_OFSET       (0x04u)
 #define PROTOCOL_ACQ_CMD_STAT           (0x01u)
 #define PROTOCOL_ACQ_RES_OFFSET         (0x02u)
 
@@ -245,30 +246,23 @@
 #define USBUART1_INEP_MODE_REG_PTR      (USBFS_SIE_EP4_CR0_PTR)
 #define USBUART2_INEP_MODE_REG_PTR      (USBFS_SIE_EP7_CR0_PTR)
 
-/* Structure for comPort*/
+/* Structure for comPort */
 typedef struct {
-    volatile uint8_t * usbUartInEpWriteDataPointer;
-    volatile uint8_t * usbUartInEpWritePointer;
-    volatile uint8_t * usbUartInEpWriteMsbPointer;
-    volatile uint8_t * usbUartInEpCount0Pointer;
-    volatile uint8_t * usbUartInEpCount1Pointer;
-    volatile uint8_t * usbUartInEpReadPointer;
-    volatile uint8_t * usbUartInEpReadMsbPointer;
-    volatile uint8_t * usbUartInEpModeRegisterPointer;
     uint8_t uartOutEp;
     uint8_t uartInEp;
     uint8_t uartHwErrorMask;
     uint8_t uartHwFifoNotEmptyMask;
     uint8_t uartSwBufferOverflowMask;
     uint8_t uartFifoLength;
+    uint16_t uartTxBufferSize;
     uint8_t uartRtsPinMask;
     uint8_t (*UartReadRxStatus)(void);
     void (*UartClearRxBuffer)(void);
     void (*UartClearTxBuffer)(void);
     uint16_t (*UartGetRxBufferSize)(void);
-    uint8_t (*UartGetChar)(void);
+    uint8_t (*UartReadRxData)(void);
+    uint16_t (*UartGetTxBufferSize)(void);
     void (*UartPutArray)(const uint8 string[], uint16 byteCount);
-    uint8_t *usbUartTx_Buffer;
     uint32_t uartRtsPinPc;
     uint32_t uartRtsPinByp;
     void (*UartClockStop)(void);

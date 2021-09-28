@@ -4,7 +4,7 @@ KitProg3 Firmware repo
 ### Overview
 
 This repo contains only KitProg3 Firmware source code.
-The compiled firmware is delivered with [fw-loader utility](https://github.com/cypresssemiconductorco/Firmware-loader).
+The compiled firmware is delivered with [fw-loader utility](https://github.com/Infineon/Firmware-loader).
 
 ### Build Notes
 
@@ -13,7 +13,7 @@ The compiled firmware is delivered with [fw-loader utility](https://github.com/c
 - There are two options how to programm recently compiled images to PSoC5LP on the Cypress kit:
   - KitProg3_1.hex can be programmed with an external debug probe.
   - KitProg3_1.cyacd can be programmed using the fw-loader utility:
-     1. Copy the KitProg3_1.cyacd file to bin/firmware/KitProg3.cyacd in the fw-loader utility.
+     1. Copy the KitProg3_1.cyacd file to kp-firmware/KitProg3.cyacd in the fw-loader utility.
      2. Use the --update-kp3 option of the fw-loader utility to update the firmware.
 
 ### Notes
@@ -21,7 +21,7 @@ Note, this KitProg3 firmware source code is without the DapLink code part, which
 
 ### More information
 
--   [fw-loader README.md](https://github.com/cypresssemiconductorco/Firmware-loader/blob/master/README.md)
+-   [fw-loader README.md](https://github.com/Infineon/Firmware-loader/blob/master/README.md)
 -   [Kitprog3 User Guide](https://www.cypress.com/documentation/development-kitsboards/kitprog-user-guide)
 -   [KitProg Host Protocol Interface](https://www.cypress.com/file/520056/download)
 -   [PSoC® Creator™ Integrated Design Environment](https://www.cypress.com/products/psoc-creator-integrated-design-environment-ide)

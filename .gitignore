@@ -1,8 +1,10 @@
+# Backups
+/Backup/*
 # Compiled files
 /**/Release/*
 /**/Debug/*
 # Build logs
-BUILD.log
+/**/*.log
 # Generated export
 /**/Export/*
 # Generated sources

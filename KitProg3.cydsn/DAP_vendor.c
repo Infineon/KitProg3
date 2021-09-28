@@ -25,19 +25,21 @@
  *
  *---------------------------------------------------------------------------*/
 /*---------------------------------------------------------------------------
- * Portions Copyright 2018, Cypress Semiconductor Corporation
- * or a subsidiary of Cypress Semiconductor Corporation. All rights
- * reserved.
- * This software, associated documentation and materials ("Software") is
+ * Portions Copyright 2018-2021, Cypress Semiconductor Corporation
+ * (an Infineon company) or an affiliate of Cypress Semiconductor Corporation.
+ * All rights reserved.
+ *
+ * This software, associated documentation and materials (“Software”) is
  * owned by Cypress Semiconductor Corporation or one of its
- * subsidiaries ("Cypress") and is protected by and subject to worldwide
+ * affiliates (“Cypress”) and is protected by and subject to worldwide
  * patent protection (United States and foreign), United States copyright
  * laws and international treaty provisions. Therefore, you may use this
  * Software only as provided in the license agreement accompanying the
- * software package from which you obtained this Software ("EULA"). If
+ * software package from which you obtained this Software (“EULA”). If
  * no EULA applies, then any reproduction, modification, translation,
  * compilation, or representation of this Software is prohibited without the
  * express written permission of Cypress.
+ *
  * Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO
  * WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING,
  * BUT NOT LIMITED TO, NONINFRINGEMENT, IMPLIED
@@ -48,10 +50,11 @@
  * product or circuit described in the Software. Cypress does not
  * authorize its products for use in any products where a malfunction or
  * failure of the Cypress product may reasonably be expected to result in
- * significant property damage, injury or death ("High Risk Product"). By
- * including Cypress's product in a High Risk Product, the manufacturer
+ * significant property damage, injury or death (“High Risk Product”). By
+ * including Cypress’s product in a High Risk Product, the manufacturer
  * of such system or application assumes all risk of such use and in doing
  * so agrees to indemnify Cypress against all liability.
+ *
  * THE CYPRESS COPYRIGHTED PORTIONS ARE NOT SUBMISSIONS AS SET FORTH IN THE
  * APACHE LICENSE VERSION 2.0 OR ANY OTHER LICENSE HAVING SIMILAR PROVISIONS.
  *---------------------------------------------------------------------------*/
@@ -250,7 +253,7 @@ uint32_t DAP_ProcessVendorCommand(const uint8_t *request, uint8_t *response) {
                 num = ID_DAP_DEF_CASE_RESP_LEN;
             }
             break;
-            
+
         case ID_DAP_Vendor16:
             /* Command 0x90 */
             num = ((1UL << 16) | GetCapabilities(request, response));
@@ -258,6 +261,10 @@ uint32_t DAP_ProcessVendorCommand(const uint8_t *request, uint8_t *response) {
         case ID_DAP_Vendor17:
             /* Command 0x91 */
             num = ((2UL << 16) | SetAcquireOption(request, response));
+            break;
+        case ID_DAP_Vendor18:
+            /* Command 0x92 */
+            num = ((1UL << 16) | GetUidData(request, response));
             break;
         default:
         {
@@ -481,15 +488,15 @@ uint32_t HandleLedCmd(const uint8_t *request, uint8_t *response)
 
 
 /******************************************************************************
-*  handleAcquire
+*  HandleAcquire
 ***************************************************************************//**
 * Executes acquire request.
 *
 * @param[in] request Pointer to incoming USB packet
 *
-* @param[in] response Pointer to the memory for storing response
+* @param[out] response Pointer to the memory for storing response
 *
-* @param[out] Result of acquire attempt.
+* @return Result of acquire attempt.
 *        0x00 - device was not acquired
 *        0x01 - device was acquired
 *
@@ -515,7 +522,7 @@ uint32_t HandleAcquire(const uint8_t *request, uint8_t *response)
         uint16_t lastWaitRespTimerVal = startTimerVal;
 
         /* First try with proper power mode */
-        resp = (uint8_t)(Swd_Acquire((uint32_t)(swdAcquireDut), (uint32_t)(swdAcquireMode)));
+        resp = (uint8_t)(Swd_Acquire((uint32_t)(swdAcquireDut), (uint32_t)(swdAcquireMode), &request[PROTOCOL_CUSTOM_SEQ_OFSET]));
 
         if (((uint16_t)(lastWaitRespTimerVal - Timer_CSTick_ReadCounter())) >= ((uint16_t)(TIMER_CSTICK_HALF_RATE)))
         {
@@ -528,7 +535,7 @@ uint32_t HandleAcquire(const uint8_t *request, uint8_t *response)
             if (resp != ACQUIRE_PASS)
             {
                 /* Try to acquire without changing of power settings */
-                resp = (uint8_t)(Swd_Acquire((uint32)(swdAcquireDut),(uint32_t)(ACQUIRE_IDLE)));
+                resp = (uint8_t)(Swd_Acquire((uint32)(swdAcquireDut),(uint32_t)(ACQUIRE_IDLE), &request[PROTOCOL_CUSTOM_SEQ_OFSET]));
             }
             else
             {
@@ -560,15 +567,15 @@ uint32_t HandleAcquire(const uint8_t *request, uint8_t *response)
 }
 
 /******************************************************************************
-*  getCapabilities()
+*  GetCapabilities
 ***************************************************************************//**
 * Executes get probe info/capabilities command.
 *
 * @param[in] request Pointer to incoming USB packet
 *
-* @param[in] response Pointer to the memory for storing response
+* @param[out] response Pointer to the memory for storing response
 *
-* @param[out] Returns size of response packet.
+* @return Returns size of response packet.
 *
 ******************************************************************************/
 uint32_t GetCapabilities(const uint8_t *request, uint8_t *response)
@@ -602,15 +609,15 @@ uint32_t GetCapabilities(const uint8_t *request, uint8_t *response)
 }
 
 /******************************************************************************
-*  getSetPower()
+*  GetSetPower
 ***************************************************************************//**
 * Executes get/set Power Vendor command.
 *
 * @param[in] request Pointer to incoming USB packet
 *
-* @param[in] response Pointer to the memory for storing response
+* @param[out] response Pointer to the memory for storing response
 *
-* @param[out] Returns size of response packet.
+* @return size of response packet.
 *
 ******************************************************************************/
 uint32_t GetSetPower(const uint8_t *request, uint8_t *response)
@@ -726,15 +733,15 @@ uint32_t GetSetPower(const uint8_t *request, uint8_t *response)
 }
 
 /******************************************************************************
-*  setAcquireTimeout()
+*  SetAcquireTimeout
 ***************************************************************************//**
 * Sets Acquire Timeout in seconds
 *
 * @param[in] request Pointer to incoming USB packet
 *
-* @param[in] response Pointer to the memory for storing response
+* @param[out] response Pointer to the memory for storing response
 *
-* @param[out] Returns size of response packet.
+* @return size of response packet.
 *
 ******************************************************************************/
 static uint32_t SetAcquireTimeout(const uint8_t *request, uint8_t *response)
@@ -754,15 +761,15 @@ static uint32_t SetAcquireTimeout(const uint8_t *request, uint8_t *response)
 }
 
 /******************************************************************************
-*  SetAcquireDapHandshake()
+*  SetAcquireDapHandshake
 ***************************************************************************//**
 * Sets DAP Handshake type for Acquire flow
 *
 * @param[in] request Pointer to incoming USB packet
 *
-* @param[in] response Pointer to the memory for storing response
+* @param[out] response Pointer to the memory for storing response
 *
-* @param[out] Returns size of response packet.
+* @return size of response packet.
 *
 ******************************************************************************/
 static uint32_t SetAcquireDapHandshake(const uint8_t *request, uint8_t *response)
@@ -779,15 +786,15 @@ static uint32_t SetAcquireDapHandshake(const uint8_t *request, uint8_t *response
 }
 
 /******************************************************************************
-*  setAcquireDAPAP()
+*  SetAcquireDapAp
 ***************************************************************************//**
 * Sets DAP AP for Acquire flow
 *
 * @param[in] request Pointer to incoming USB packet
 *
-* @param[in] response Pointer to the memory for storing response
+* @param[out] response Pointer to the memory for storing response
 *
-* @param[out] Returns size of response packet.
+* @return size of response packet.
 *
 ******************************************************************************/
 static uint32_t SetAcquireDapAp(const uint8_t *request, uint8_t *response)
@@ -798,15 +805,15 @@ static uint32_t SetAcquireDapAp(const uint8_t *request, uint8_t *response)
 }
 
 /******************************************************************************
-*  setAcquireOption()
+*  SetAcquireOption
 ***************************************************************************//**
 * Sets temporary options for Acquire flow
 *
 * @param[in] request Pointer to incoming USB packet
 *
-* @param[in] response Pointer to the memory for storing response
+* @param[out] response Pointer to the memory for storing response
 *
-* @param[out] Returns size of response packet.
+* @return size of response packet.
 *
 ******************************************************************************/
 uint32_t SetAcquireOption(const uint8_t *request, uint8_t *response)
@@ -855,7 +862,9 @@ void WaitVendorResponse(void)
         {
             /* Wait for the data to be received by the host */
         }
+        uint32_t intrMask = CyUsbIntDisable();
         USBFS_LoadInEP(ep, acquireWaitResponse, 2u);
+        CyUsbIntEnable(intrMask);
         while(USBFS_IN_BUFFER_EMPTY != USBFS_GetEPState(ep))
         {
             /* Wait for the data to be received by the host */
@@ -866,7 +875,9 @@ void WaitVendorResponse(void)
         if (cachedCurrentMode == MODE_HID)
         {
             ep = CMSIS_HID_IN_EP;
+            uint32_t intrMask = CyUsbIntDisable();
             USBFS_LoadInEP(ep, acquireWaitResponse, responseSize);
+            CyUsbIntEnable(intrMask);
             while (USBFS_IN_BUFFER_EMPTY != USBFS_GetEPState(ep))
             {
                 /* Wait for the data to be received by the host */
@@ -877,6 +888,74 @@ void WaitVendorResponse(void)
             /* Only Two modes are possible for CMSIS-DAP interface */
         }
     }
+}
+
+
+/******************************************************************************
+*  CalculateUniqIdChacksum
+***************************************************************************//**
+* Calculate UID Record's checksum
+*
+* @param[in] uidRecord Pointer to uid record
+*
+* @return computed unique ID record checksum
+*
+******************************************************************************/
+static uint8_t CalculateUniqIdChacksum(const unique_id_struct_t *uidRecord)
+{
+    uint8_t checksum = 0u;
+    const uint8_t *uidAddress = (const uint8_t *)uidRecord;
+    const uint8_t checkSumPos = sizeof(unique_id_struct_t) - sizeof(checksum);
+
+    for (uint8_t index = 0u; index < checkSumPos; index++)
+    {
+        checksum += uidAddress[index];
+    }
+
+    return (uint8_t)(CRC8_2S_COMP_BASE - checksum);
+}
+
+
+/******************************************************************************
+*  GetUidData()
+***************************************************************************//**
+* Returns to the host KitProg3 UID
+*
+* @param[in] request Pointer to incoming USB packet
+*
+* @param[out] response Pointer to the memory for storing response
+*
+* @returns size of response packet.
+*
+******************************************************************************/
+uint32_t GetUidData(const uint8_t *request, uint8_t *response)
+{
+    (void)request;
+    uint32_t num = 0u;
+
+    const unique_id_struct_t *uidRecord = (unique_id_struct_t *)UNIQUE_ID_ADDRESS;
+
+    /* Calculate unique id record's checksum */
+    uint8_t uidChecksum = CalculateUniqIdChacksum(uidRecord);
+    bool uidIsValid = ((uidRecord->signature == PSOC5_SIID) && (uidRecord->checksum == uidChecksum));
+
+    response[GENERAL_RESPONSE_STATUS] = DAP_OK;
+
+    if (uidIsValid)
+    {
+        const size_t uidRecSize = sizeof(unique_id_struct_t) - sizeof(uidRecord->signature);
+        const uint8_t *uidRecPayload = (const uint8_t *)uidRecord;
+        response[GENERAL_RESPONSE_RESULT] = UNIQUE_ID_VALID;
+        (void)memcpy(&response[GENERAL_RESPONSE_RESULT + 1], &uidRecPayload[sizeof(uidRecord->signature)], uidRecSize);
+        num += uidRecSize + 3UL;
+    }
+    else
+    {
+        response[GENERAL_RESPONSE_RESULT] = UNIQUE_ID_INVALID;
+        num += 3UL;
+    }
+
+    return num;
 }
 
 ///@}

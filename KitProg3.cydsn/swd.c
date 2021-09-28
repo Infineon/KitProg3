@@ -4,7 +4,7 @@
 * @brief
 *  This file provides the source code to handle SWD programming.
 *
-* @version KitProg3 v2.21
+* @version KitProg3 v2.30
 */
 /*
 * Related Documents:
@@ -14,20 +14,19 @@
 *
 *
 ******************************************************************************
-* Copyright (2018), Cypress Semiconductor Corporation or a
-* subsidiary of Cypress Semiconductor Corporation. All rights
-* reserved.
+* (c) (2018-2021), Cypress Semiconductor Corporation (an Infineon company)
+* or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
 * owned by Cypress Semiconductor Corporation or one of its
-* subsidiaries ("Cypress") and is protected by and subject to worldwide
+* affiliates ("Cypress") and is protected by and subject to worldwide
 * patent protection (United States and foreign), United States copyright
 * laws and international treaty provisions. Therefore, you may use this
 * Software only as provided in the license agreement accompanying the
 * software package from which you obtained this Software ("EULA"). If
 * no EULA applies, then any reproduction, modification, translation,
-* compilation, or representation of this Software is prohibited without the
-* express written permission of Cypress.
+* compilation, or representation of this Software is prohibited without
+* the express written permission of Cypress.
 *
 * Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO
 * WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING,
@@ -36,14 +35,15 @@
 * PARTICULAR PURPOSE. Cypress reserves the right to make
 * changes to the Software without notice. Cypress does not assume any
 * liability arising out of the application or use of the Software or any
-* product or circuit described in the Software. Cypress does not
-* authorize its products for use in any products where a malfunction or
-* failure of the Cypress product may reasonably be expected to result in
-* significant property damage, injury or death ("High Risk Product"). By
-* including Cypress's product in a High Risk Product, the manufacturer
+* product or circuit described in the Software. Cypress does not authorize
+* its products for use in any products where a malfunction or failure
+* of the Cypress product may reasonably be expected to result in significant
+* property damage, injury or death ("High Risk Product").
+* By including Cypress's product in a High Risk Product, the manufacturer
 * of such system or application assumes all risk of such use and in doing
-* so agrees to indemnify Cypress against all liability
+* so agrees to indemnify Cypress against all liability.
 *****************************************************************************/
+
 #include "power.h"
 #include "swd.h"
 #include "DAP_config.h"
@@ -70,9 +70,12 @@
 #define UINT32_FOUR_UINT8_AND_PARITY(u32) UINT32_FOUR_UINT8(u32), UINT32_PARITY(u32)
 #define SWD_WRITE_BLOCK(u8_cmd,u32_data) {u8_cmd, UINT32_FOUR_UINT8_AND_PARITY(u32_data)}
 
-/* runtime transform macros */
+/* Runtime transform macros */
 #define SHIFT_LEFT(cmd,bits) (((uint32_t)(uint8_t)(cmd))<<(bits))
-#define PACK_UINT8_TO_UINT32(u8_ptr)   ((SHIFT_LEFT((u8_ptr[3u]),24u))|(SHIFT_LEFT((u8_ptr[2u]),16u))|(SHIFT_LEFT((u8_ptr[1u]),8u))|(SHIFT_LEFT((u8_ptr[0u]),0u)))
+#define PACK_UINT8_TO_UINT32(u8_ptr)        ((SHIFT_LEFT((u8_ptr[3u]),24u))|(SHIFT_LEFT((u8_ptr[2u]),16u))| \
+                                             (SHIFT_LEFT((u8_ptr[1u]),8u))|(SHIFT_LEFT((u8_ptr[0u]),0u)))
+#define PACK_UINT8_TO_UINT32_MSB(u8_ptr)    ((SHIFT_LEFT((u8_ptr[0u]),24u))|(SHIFT_LEFT((u8_ptr[1u]),16u))| \
+                                             (SHIFT_LEFT((u8_ptr[2u]),8u))|(SHIFT_LEFT((u8_ptr[3u]),0u)))
 
 /* SWD request phase bits */
 #define SWD_REQ_START     (1u<<0u)
@@ -94,6 +97,17 @@
 #define AP_W_CSW          (0xA3u)
 #define AP_W_TAR          (0x8Bu)
 #define AP_W_DRW          (0xBBu)
+
+/* PSoC5 specific values */
+#define PSOC5_TM_REG            (0xEA7E30A9u)
+#define PSOC5_PORT_ACQUIRE_KEY  (0x7B0C06DBu)
+#define PSOC5_DP_IDCODE         (0x2BA01477u)
+#define PSOC5_PORT_ACQ_COM_POS  (0x01u)
+#define PSOC5_PORT_ACQ_KEY_POS  (0x02u)
+
+#define MAX_OVERALL_COMMAND_INDEX   (59u)
+#define MAX_LONG_COMMAND_INDEX      (55u)
+
 /* Delays after power on and power off while acquiring */
 #define PWR_OFF_DELAY_US                (100000u)
 #define PWR_ON_DELAY_US                 (100u)
@@ -101,17 +115,17 @@
 /* Idle cycle count before SWD header segment sending */
 #define SWD_IDLE_CYCLES (20u)
 
-#define PSOC5_DP_IDCODE (0x2BA01477u)
-
 /* PSOC4 Acquire timeout in ticks */
 #define PSOC4_AQUIRE_TIMEOUT_DEFAULT_TICKS                  (2u)
 #define PSOC4_AQUIRE_TIMEOUT_RESET_TICKS                    (2u)
 #define PSOC4_AQUIRE_TIMEOUT_POWER_CYCLE_TICKS              (4u)
+
 /* PSOC5 Acquire timeout in ticks */
-#define PSOC5_AQUIRE_TIMEOUT_DEFAULT_TICKS                  (2u)
-#define PSOC5_AQUIRE_TIMEOUT_RESET_TICKS                    (2u)
-#define PSOC5_AQUIRE_TIMEOUT_POWER_CYCLE_TICKS              (4u)
-#define PSOC5_AQUIRE_TIMEOUT_POWER_CYCLE_UNSUPPORTED_TICKS  (240u)
+#define PSOC3_5_AQUIRE_TIMEOUT_DEFAULT_TICKS                  (2u)
+#define PSOC3_5_AQUIRE_TIMEOUT_RESET_TICKS                    (2u)
+#define PSOC3_5_AQUIRE_TIMEOUT_POWER_CYCLE_TICKS              (4u)
+#define PSOC3_5_AQUIRE_TIMEOUT_POWER_CYCLE_UNSUPPORTED_TICKS  (240u)
+
 /* Acquire timeout in Timer_CSTick ticks (800Hz rate, 800 ticks == 1000ms) */
 #define PSOC6_TVII_AQUIRE_TIMEOUT_TICKS                     (800u)
 #define PSOC6_TVII_HALF_AQUIRE_TIMEOUT_TICKS                (PSOC6_TVII_AQUIRE_TIMEOUT_TICKS/2u)
@@ -165,7 +179,6 @@
 #define CYW20828             (0x110u)
 
 /* SWD UDB related defines */
-
 #define SWD_DATA_WRITE_REG          (* (reg32 *) SWD_1_data_dp_u0__F0_REG)
 #define SWD_DATA_READ_REG           (* (reg32 *) SWD_1_data_dp_u0__F1_REG)
 #define SWD_DATA_AUX_CTL_REG        (* (reg32 *) SWD_1_data_dp_u0__DP_AUX_CTL_REG)
@@ -200,8 +213,10 @@
 
 /* Park Bit=1, Stop Bit=0, Parity Bit, A3 Bit, A2 Bit, RnW Bit, APnDP Bit, Start Bit=1 */
 #define HW_PREAMBLE_TEMPLATE    (0x81u)
+
 /* Parity for values in 0x0..0xF range is 0b0110100110010110 => 0x6996 */
 #define PARITY_MAGIC            (0x6996u)
+
 /* HW preamble from SWD transfer request creation macro */
 #define HW_PREAMBLE(req)        ((HW_PREAMBLE_TEMPLATE) | ((uint8_t)((req) & 0x0Fu) << 1u) | ((((PARITY_MAGIC) >> (uint8_t)((req) & 0x0Fu)) & 1u) << 5u))
 
@@ -212,58 +227,64 @@ typedef struct __attribute__((packed)) {
 } SwdWriteDataBlock_t;
 
 enum SwdWriteBlockIndex_e {
+    ACQUIRE_DP_PSOC3_5,       /* Initialize Debug Port CTRL/STAT for PSOC3/5                */
     INIT_DP_CR_PSOC4,         /* Initialize Debug Port CTRL/STAT for PSOC4                  */
-    INIT_DP_CR_PSOC6_CYW20829,/* Initialize Debug Port CTRL/STAT for PSOC6, TVII, CYW20829 */
-    SEL_AP_BANK0,             /* APSEL=0x00, APBANKSEL=0x0, PRESCALER=0x0                 */
-    SEL_AP_BANKF,             /* APSEL=0x00, APBANKSEL=0xF, PRESCALER=0x0                */
-    SET_CSW_DEFAULT,          /* Set CSW 32-bit transfer mode                           */
-    SET_CSW_PROTECT,          /* Set CSW Prot=0x23, DeviceEn=1, 32-bit transfer mode   */
-    SET_TAR_TMR_PSOC4,        /* Set TAR to PSOC4 Test Mode register as destination   */
-    SET_TAR_TMR_PSOC5,        /* Set TAR to PSOC5 Test Mode register as destination  */
-    SET_TAR_TMR_PSOC6,        /* Set TAR to PSOC6 Test Mode register as destination */
-    SET_TAR_TMR_TVII,         /* Set TAR to TVII Test Mode register as destination */
-    SET_TAR_TMR_CYW20829,     /* Set TAR to CYW20829 Test Mode register as destination     */
-    SET_DWR_TMR_PSOC5,        /* Write data into Test Mode register for PSOC5             */
-    SET_DWR_TMR_PSOCX,        /* Write data into Test Mode register for PSOC4,PSOC6,TVII */
-    CLR_ERRORS,               /* Write to ABORT DP register                             */
+    INIT_DP_CR_PSOC6_CYW20829,/* Initialize Debug Port CTRL/STAT for PSOC6, TVII, CYW20829  */
+    SEL_AP_BANK0,             /* APSEL=0x00, APBANKSEL=0x0, PRESCALER=0x0                   */
+    SEL_AP_BANKF,             /* APSEL=0x00, APBANKSEL=0xF, PRESCALER=0x0                   */
+    SET_CSW_DEFAULT,          /* Set CSW 32-bit transfer mode                               */
+    SET_CSW_PROTECT,          /* Set CSW Prot=0x23, DeviceEn=1, 32-bit transfer mode        */
+    SET_TAR_TMR_PSOC3,        /* Set TAR to PSOC3 Test Mode register as destination         */
+    SET_TAR_TMR_PSOC4,        /* Set TAR to PSOC4 Test Mode register as destination         */
+    SET_TAR_TMR_PSOC5,        /* Set TAR to PSOC5 Test Mode register as destination         */
+    SET_TAR_TMR_PSOC6,        /* Set TAR to PSOC6 Test Mode register as destination         */
+    SET_TAR_TMR_TVII,         /* Set TAR to TVII Test Mode register as destination          */
+    SET_TAR_TMR_CYW20829,     /* Set TAR to CYW20829 Test Mode register as destination      */
+    SET_DWR_TMR_PSOC3_5,      /* Write data into Test Mode register for PSOC3,PSOC5         */
+    SET_DWR_TMR_PSOCX,        /* Write data into Test Mode register for PSOC4,PSOC6,TVII    */
+    CLR_ERRORS,               /* Write to ABORT DP register                                 */
     NUM_OF_ITEMS
 };
 
+/* SWD Requests*/
 static SwdWriteDataBlock_t swdWriteBlockDict[NUM_OF_ITEMS] = {
+    [ACQUIRE_DP_PSOC3_5]        = SWD_WRITE_BLOCK(DP_W_RDBUFF,    0x7B0C06DBu), /* Acquire Debug Port */
     [INIT_DP_CR_PSOC4]          = SWD_WRITE_BLOCK(DP_W_CTRL_STAT, 0x54000000u), /* Initialize Debug Port CTRL/STAT                            */
     [INIT_DP_CR_PSOC6_CYW20829] = SWD_WRITE_BLOCK(DP_W_CTRL_STAT, 0x50000000u), /* Initialize Debug Port CTRL/STAT                           */
     [SEL_AP_BANK0]              = SWD_WRITE_BLOCK(DP_W_SELECT,    0x00000000u), /* Select SYS AP                                            */
     [SEL_AP_BANKF]              = SWD_WRITE_BLOCK(DP_W_SELECT,    0x000000F0u), /* APSEL=0x00, APBANKSEL=0xF, PRESCALER=0x0                */
     [SET_CSW_DEFAULT]           = SWD_WRITE_BLOCK(AP_W_CSW,       0x00000002u), /* CSW 32-bit transfer mode                               */
     [SET_CSW_PROTECT]           = SWD_WRITE_BLOCK(AP_W_CSW,       0x23000052u), /* CSW Prot=0x23, DeviceEn=1, 32-bit transfer mode       */
+    [SET_TAR_TMR_PSOC3]         = SWD_WRITE_BLOCK(AP_W_TAR,       0x00050210u), /* Set TAR to PSOC3 Test Mode register as destination   */
     [SET_TAR_TMR_PSOC4]         = SWD_WRITE_BLOCK(AP_W_TAR,       0x40030014u), /* Set TAR to PSOC4 Test Mode register as destination   */
     [SET_TAR_TMR_PSOC5]         = SWD_WRITE_BLOCK(AP_W_TAR,       0x40050210u), /* Set TAR to PSOC5 Test Mode register as destination  */
     [SET_TAR_TMR_PSOC6]         = SWD_WRITE_BLOCK(AP_W_TAR,       0x40260100u), /* Set TAR to PSOC6 Test Mode register as destination */
     [SET_TAR_TMR_TVII]          = SWD_WRITE_BLOCK(AP_W_TAR,       0x40261100u), /* Set TAR to TVII Test Mode register as destination */
     [SET_TAR_TMR_CYW20829]      = SWD_WRITE_BLOCK(AP_W_TAR,       0x40200400u), /* Set TAR to CYW20829 Acuire flag in BootRom RAM as destination      */
-    [SET_DWR_TMR_PSOC5]         = SWD_WRITE_BLOCK(AP_W_DRW,       0xEA7E30A9u), /* Write data into Test Mode register for PSOC5                      */
+    [SET_DWR_TMR_PSOC3_5]       = SWD_WRITE_BLOCK(AP_W_DRW,       0xEA7E30A9u), /* Write data into Test Mode register for PSOC3/5                      */
     [SET_DWR_TMR_PSOCX]         = SWD_WRITE_BLOCK(AP_W_DRW,       0x80000000u), /* Write data into Test Mode register for PSOC4,PSOC6,TVII,CYW20829 */
     [CLR_ERRORS]                = SWD_WRITE_BLOCK(DP_W_ABORT,     0x0000001Eu), /* ORUNERRCLR=1, WDERRCLR=1, STKERRCLR=1, STKCMPCLR=1, DAPABORT=0  */
 };
 
 /* Set Test Mode register as destination index */
-static const enum SwdWriteBlockIndex_e genTestAddrIndex[5u] = {
+static const enum SwdWriteBlockIndex_e genTestAddrIndex[6u] = {
     SET_TAR_TMR_PSOC4,
     SET_TAR_TMR_PSOC5,
     SET_TAR_TMR_PSOC6,
     SET_TAR_TMR_TVII,
-    SET_TAR_TMR_CYW20829
+    SET_TAR_TMR_CYW20829,
+    SET_TAR_TMR_PSOC3,
 };
 
 /* Write data into Test Mode register index */
-static const enum SwdWriteBlockIndex_e genTestDataIndex[5u] = {
-    SET_DWR_TMR_PSOCX, /* PSOC4 */
-    SET_DWR_TMR_PSOC5, /* PSOC5 */
-    SET_DWR_TMR_PSOCX, /* PSOC6 */
-    SET_DWR_TMR_PSOCX, /* TVII */
-    SET_DWR_TMR_PSOCX  /* CYW20829 */
+static const enum SwdWriteBlockIndex_e genTestDataIndex[6u] = {
+    SET_DWR_TMR_PSOCX,    /* PSOC4 */
+    SET_DWR_TMR_PSOC3_5,  /* PSOC5 */
+    SET_DWR_TMR_PSOCX,    /* PSOC6 */
+    SET_DWR_TMR_PSOCX,    /* TVII */
+    SET_DWR_TMR_PSOCX,    /* CYW20829 */
+    SET_DWR_TMR_PSOC3_5,  /* PSOC3 */
 };
-
 
 /*****************************************************************************
 * Local Variable Declarations
@@ -469,10 +490,10 @@ static uint8_t SwdGetByte(void)
 ***************************************************************************//**
 * Puts the complete data segment received on to the SWD lines.
 *
-* @param[in]   Pointer to the address with data to write.
+* @param[in] pbData Pointer to the address with data to write.
 *
 ******************************************************************************/
-static void SwdPutDataSegment(const uint8_t  *pbData)
+static void SwdPutDataSegment(const uint8_t *pbData)
 {
     SWD_SET_SDA_OUT;
     for (uint8_t index = 0u; index < SWD_XFER_SIZE; index++)
@@ -679,9 +700,9 @@ static void SwdGetData(uint8_t *pbData)
 ***************************************************************************//**
 * Puts data to SWD line
 *
-* @param[in]  pbData   Pointer to SWDWriteDataBlock_t
+* @param[in]  dataBlock   Pointer to SWDWriteDataBlock_t
 *
-* @retuen  Boolean value representing if SWD packet ACK data.
+* @return  Boolean value representing if SWD packet ACK data.
 *
 ******************************************************************************/
 static bool SwdAcquirePutdataBlock(const SwdWriteDataBlock_t *dataBlock)
@@ -730,7 +751,7 @@ static bool SwdAcquirePutdataBlock(const SwdWriteDataBlock_t *dataBlock)
 * Command, data and parity is provided in block
 * result (ACK) is returned to buf_ACK buffer.
 *
-* @param[in]  bufOut    pointer to SWDWriteDataBlock_t
+* @param[in]  dataBlock    pointer to SWDWriteDataBlock_t
 * @param[out] buf_ACK   buffer for return (ACK).
 *
 ******************************************************************************/
@@ -915,6 +936,96 @@ static void SwdAcquireResetOrPowerCycle(uint32_t acquireMode)
 }
 
 /******************************************************************************
+*  SwdAcquirePSoC3
+***************************************************************************//**
+* Acquires PSoC 3 Devices.
+*
+* @param[in]  acquireMode   Reset or Power cycle acquire.
+*
+* @return Flag whether the PSoC3 is acquired or not (ACQUIRE_PASS /
+*         ACQUIRE_FAIL).
+*
+******************************************************************************/
+static uint32_t SwdAcquirePSoC3(uint32_t acquireMode)
+{
+    /* PSoC6 specific SWD Sequence */
+    static const enum SwdWriteBlockIndex_e PSoC3Sequence [] = {
+        SET_TAR_TMR_PSOC3,
+        SET_DWR_TMR_PSOC3_5,
+    };
+    /* Acquire algorithm for PSoC6 */
+    bool swdAcquired = false;
+    uint32_t resp = ACQUIRE_FAIL;
+    uint16_t tmrVal = 0u;
+    uint16_t tmrDiff = 0u;
+
+    uint8_t enableInterrupts = CyEnterCriticalSection();
+    SwdAcquireResetOrPowerCycle(acquireMode);
+
+    /* Execute DAP handshake. Reset SWD bus by defauld*/
+    (*dapHandshake)();
+    tmrVal = Timer_CSTick_ReadCounter();
+    do {
+        /* Send debug key */
+        /* 99 db 06 0c 7b */
+        swdAcquired = SwdAcquirePutdataBlock(&swdWriteBlockDict[ACQUIRE_DP_PSOC3_5]);
+        
+        tmrDiff = tmrVal - Timer_CSTick_ReadCounter();
+    }
+    while ((tmrDiff < acquireTimeout) && (!swdAcquired));
+
+    if (swdAcquired)
+    {
+        for (uint32_t index = 0u; swdAcquired && (index < (sizeof(PSoC3Sequence)/sizeof(enum SwdWriteBlockIndex_e))); index++)
+        {
+            uint8_t ack;
+            enum SwdWriteBlockIndex_e idx = PSoC3Sequence[index];
+            SwdWriteBlock(&swdWriteBlockDict[idx], &ack);
+            if ((ack & SWD_ACK_BITS) != SWD_ACK )
+            {
+                swdAcquired = false;
+            }
+        }
+        
+        if (swdAcquired)
+        {
+            /* Read RDBUFF to check AP transfer status */
+            gbHeader = DP_R_RDBUFF;
+            SwdGetData(gbData);
+
+            /* Check status for the Read RDBUFF code request*/
+            if ((gbStatsReg & (SWD_ACK_BITS | SWD_PERR)) != SWD_ACK )
+            {
+                swdAcquired = false;
+            }
+        }
+        
+        if (!swdAcquired)
+        {
+            /* clear swd error flow */
+            /* a. Execute SWD reset sequence */
+            SwdLineReset();
+            uint8_t ack;
+            /* b. read SWD ID Code */
+            gbHeader = DP_R_IDCODE;
+            SwdGetData(gbData);
+            /* c. write to ABORT DP register */
+            if ((gbStatsReg & (SWD_ACK_BITS | SWD_PERR)) == SWD_ACK )
+            {
+                SwdWriteBlock(&swdWriteBlockDict[CLR_ERRORS], &ack);
+            }
+        }
+        resp = ((swdAcquired) ? ACQUIRE_PASS : ACQUIRE_FAIL);
+    }
+    else
+    {
+        resp = ACQUIRE_WAIT;
+    }
+    CyExitCriticalSection(enableInterrupts);
+    return (resp);
+}
+
+/******************************************************************************
 *  SwdAcquirePSoC4
 ***************************************************************************//**
 * Acquires PSoC 4.
@@ -1038,8 +1149,6 @@ static uint32_t SwdAcquirePSoC5(uint32_t acquireMode)
     uint16_t tmrVal = 0u;
     uint16_t tmrDiff = 0u;
 
-    static const SwdWriteDataBlock_t PSoC5SwdKey = SWD_WRITE_BLOCK(DP_W_RDBUFF, 0x7B0C06DBu);
-
     uint8_t enableInterrupts = CyEnterCriticalSection();
 
     SwdAcquireResetOrPowerCycle(acquireMode);
@@ -1051,7 +1160,7 @@ static uint32_t SwdAcquirePSoC5(uint32_t acquireMode)
 
         /* Send debug key */
         /* 99 db 06 0c 7b */
-        swdAcquired = SwdAcquirePutdataBlock(&PSoC5SwdKey);
+        swdAcquired = SwdAcquirePutdataBlock(&swdWriteBlockDict[ACQUIRE_DP_PSOC3_5]);
         /* Timer_CSTick is running at 800Hz rate */
         /* It is used as a time source here instead of loop counter */
         /* This ensures we will get `real` timeout value */
@@ -1837,18 +1946,168 @@ static uint32_t SwdAcquireAutodetect(uint32_t acquireMode)
     return (resp);
 }
 
+/******************************************************************************
+*  SwdAcquireCustom
+***************************************************************************//**
+* Acquires PSoC4, PSoC5, PSoC 6 and TVII.
+* Can be used to acquire any target tht supports SWD communication
+* @param[in]  acquireMode   Reset or Power cycle acquire.
+* @param[in]  initSequence  Host provided Acquire Sequence.
+* @param[in]  possiblyPSoC5 true/false.
+*
+* @return Flag whether the MCU is acquired or not (ACQUIRE_PASS /
+*         ACQUIRE_FAIL).
+*
+******************************************************************************/
+static uint32_t SwdAcquireCustom(uint32_t acquireMode, const uint8_t * initSequence, bool possiblyPSoC5)
+{
+    /* Acquire algorithm */
+    bool swdAcquired = false;
+    uint32_t resp = ACQUIRE_FAIL;
+    uint16_t tmrVal = 0u;
+    uint16_t tmrDiff = 0u;
+    uint8_t numOfCommands = initSequence[0];
+    uint8_t commandIndex = 1u;
+    uint8_t currentCommand = initSequence[commandIndex];
+    uint8_t tempIndex;
+
+    uint8_t enableInterrupts = CyEnterCriticalSection();
+
+    SwdAcquireResetOrPowerCycle(acquireMode);
+
+    tmrVal = Timer_CSTick_ReadCounter();
+
+    /* Execute DAP handshake. Specific for PSoC5 devices */
+    if (possiblyPSoC5)
+    {
+        (*dapHandshake)();
+    }
+
+    /* #1 Try to acquire SWD port */
+    do
+    {
+        /* Execute DAP handshake. JTAG to SWD sequence by default */
+        if (!possiblyPSoC5)
+        {
+            (*dapHandshake)();
+        }
+
+        /* For read commands execute one and move command index by 1 */
+        if ((currentCommand & SWD_REQ_R) == SWD_REQ_R)
+        {
+            gbHeader = currentCommand;
+            SwdGetData(gbData);
+            swdAcquired = ((gbStatsReg & (SWD_ACK_BITS | SWD_PERR)) == SWD_ACK);
+            tempIndex = 1u;
+        }
+        else
+        {
+            const uint8_t *pointerToReg = &initSequence[commandIndex + 1u];
+            uint32_t reg = (PACK_UINT8_TO_UINT32_MSB(pointerToReg));
+            SwdWriteDataBlock_t command = SWD_WRITE_BLOCK(initSequence[commandIndex], reg);
+            swdAcquired = SwdAcquirePutdataBlock(&command);
+            tempIndex = 5u;
+        }
+
+        /* Timer_CSTick is running at 800Hz rate */
+        /* It is used as a time source here instead of loop counter */
+        /* This ensures we will get `real` timeout value */
+        tmrDiff = tmrVal - Timer_CSTick_ReadCounter();
+    }
+    while ((tmrDiff < acquireTimeout) && (!swdAcquired));
+
+    /* move overall commandIndex */
+    commandIndex += tempIndex;
+    currentCommand = initSequence[commandIndex];
+
+    if(swdAcquired)
+    {
+        /* #2 Reset SWD bus, not applicable for PSoC5 devices */
+        if (!possiblyPSoC5)
+        {
+            SwdLineReset();
+        }
+
+        for (uint8_t index = 1u; swdAcquired && (index < numOfCommands); index++)
+        {
+            if (commandIndex > MAX_OVERALL_COMMAND_INDEX)
+            {
+                swdAcquired = false;
+                break;
+            }
+
+            /* For read commands execute one and move command index by 1 */
+            if ((currentCommand & SWD_REQ_R) == SWD_REQ_R)
+            {
+                gbHeader = currentCommand;
+                SwdGetData(gbData);
+                swdAcquired = ((gbStatsReg & (SWD_ACK_BITS | SWD_PERR)) == SWD_ACK);
+                commandIndex += 1u;
+            }
+            else
+            {
+                if (commandIndex > MAX_LONG_COMMAND_INDEX)
+                {
+                    swdAcquired = false;
+                    break;
+                }
+
+                const uint8_t *pointerToReg = &initSequence[commandIndex + 1u];
+                uint32_t reg = (PACK_UINT8_TO_UINT32_MSB(pointerToReg));
+                SwdWriteDataBlock_t command = SWD_WRITE_BLOCK(initSequence[commandIndex], reg);
+                swdAcquired = SwdAcquirePutdataBlock(&command);
+
+                if (swdAcquired && possiblyPSoC5 && (currentCommand == AP_W_DRW) &&
+                (reg == PSOC5_TM_REG))
+                {
+                    CyDelay(1u);
+                    SwitchJtagToSwd();
+                }
+
+                commandIndex += 5u;
+            }
+            currentCommand = initSequence[commandIndex];
+        }
+
+        if (!swdAcquired)
+        {
+            /* clear swd error flow */
+            /* a. Execute SWD reset sequence */
+            SwdLineReset();
+            uint8_t ack;
+            /* b. read SWD ID Code */
+            gbHeader = DP_R_IDCODE;
+            SwdGetData(gbData);
+            /* c. write to ABORT DP register */
+            if ((gbStatsReg & (SWD_ACK_BITS | SWD_PERR)) == SWD_ACK )
+            {
+                SwdWriteBlock(&swdWriteBlockDict[CLR_ERRORS], &ack);
+            }
+        }
+
+        resp = ((swdAcquired) ? ACQUIRE_PASS : ACQUIRE_FAIL);
+    }
+    else
+    {
+        resp = ACQUIRE_WAIT;
+    }
+
+    CyExitCriticalSection(enableInterrupts);
+
+    return (resp);
+}
 /*****************************************************************************
 * Global Functions
 *****************************************************************************/
 
 /******************************************************************************
-*  SetHandshakeType()
+*  SetHandshakeType
 ***************************************************************************//**
 * Store DAP Handshake type for Acquire flow
 *
-* @param[in] Value of Handshake type
+* @param[in] handshakeType Value of Handshake type
 *
-* @param[out] Returns true if the type of handshake was successfully set.
+* @return    true if the type of handshake was successfully set.
 *
 ******************************************************************************/
 bool SetHandshakeType(const uint8_t handshakeType)
@@ -1919,7 +2178,7 @@ void Swd_SetPinsDsiConnect(bool connect)
 ***************************************************************************//**
 * Selects maximum SWD Clock value in Hz for SWD Hardware
 *
-* @param[in]  cur_clock  Desired frequency in Hz
+* @param[in]  curClock  Desired frequency in Hz
 *
 * Note: The clock source should be twice as large as SWDCLK
 *
@@ -2001,7 +2260,7 @@ void Swd_SetHwClock(uint32_t curClock)
 ***************************************************************************//**
 * Set count of idle cycles after each transfer for SWD Hardware
 *
-* @param[in]  idle_cycles  Desired count of idle cycles
+* @param[in]  idleCycles  Desired count of idle cycles
 *
 * Note: Possible range is 1..64, the desired value will be rounded to the nearest
 *       possible value
@@ -2030,12 +2289,12 @@ void Swd_SetHwIdleClk(uint8_t idleCycles)
 }
 
 /******************************************************************************
-*  Swd_TransferHW
+*  Swd_TransferHw
 ***************************************************************************//**
 * Hardware accelerated SWD Transfer I/O
 *
 * @param[in]  request Bit field of A[3:2] RnW APnDP
-* @paran[in]  data    Pointer to Send/Receive 32 bit data word
+* @param[in]  data    Pointer to Send/Receive 32 bit data word
 *
 * @return     ack     received from SWD slave ack
 ******************************************************************************/
@@ -2221,15 +2480,33 @@ void Swd_SetApSelect(const uint8_t ap)
 * Performs Acquire procedure .
 *
 * @param[in]  dut          Target chip to acquire.
-* @param[in]  acquireMode  Acquiring mode (0 - Reset, 1- Power Cycle)
+* @param[in]  acquireMode  Acquiring mode (0 - Reset, 1 - Power Cycle)
+* @param[in]  initSequence Pointer to init sequence for the custom acquiring
 *
 * @return  Device acquiring status
 *
 ******************************************************************************/
-uint32_t Swd_Acquire(uint32_t dut, uint32_t acquireMode)
+uint32_t Swd_Acquire(uint32_t dut, uint32_t acquireMode, const uint8_t *initSequence)
 {
     uint32_t status = ACQUIRE_FAIL;
     bool mp4PowerAcquireProtection = false;
+    bool possiblePSoC5 = false;
+
+    if (dut != ACQUIRE_CUSTOM)
+    {
+        (void)initSequence;
+    }
+    else
+    {
+        const uint8_t *pointerToReg = &initSequence[PSOC5_PORT_ACQ_KEY_POS];
+        uint32_t reg = (PACK_UINT8_TO_UINT32_MSB(pointerToReg));
+        /* Check before acquire if PSoC5 Port Acquire Key is issued */
+        if ((initSequence[PSOC5_PORT_ACQ_COM_POS] == DP_W_RDBUFF) && (reg == PSOC5_PORT_ACQUIRE_KEY))
+        {
+           possiblePSoC5 = true;
+        }
+    }
+
     en_dapHandshake_t currentHandshake = DAP_HANDSHAKE_NO_DORMANT;
     //TODO This has to be protection that ensures we do not try to apply
     // voltage for power mode acquired, but device have own power or too big
@@ -2281,7 +2558,16 @@ uint32_t Swd_Acquire(uint32_t dut, uint32_t acquireMode)
                 SetHandshakeFunction(currentHandshake);
                 status = SwdAcquireAutodetect(acquireMode);
                 break;
-
+            case ACQUIRE_CUSTOM:
+                currentHandshake = (dapHandshakeType == DAP_HANDSHAKE_DEFAULT) ? DAP_HANDSHAKE_NO_DORMANT : dapHandshakeType;
+                SetHandshakeFunction(currentHandshake);
+                status = SwdAcquireCustom(acquireMode, initSequence, possiblePSoC5);
+                break;
+            case ACQUIRE_PSoC3:
+                currentHandshake = (dapHandshakeType == DAP_HANDSHAKE_DEFAULT) ? DAP_HANDSHAKE_NO_DORMANT : dapHandshakeType;
+                SetHandshakeFunction(currentHandshake);
+                status = SwdAcquirePSoC3(acquireMode);
+                break;
             default: /* Unknown acquire method  */
                 break;
         }
@@ -2293,7 +2579,7 @@ uint32_t Swd_Acquire(uint32_t dut, uint32_t acquireMode)
 ***************************************************************************//**
 * Sets Timeout for acquiring SWD Target pins in proper Acquiring Mode
 *
-* @param[in]  dut          Target chip to acquire.
+* @param[in]  acquireDUT   Target chip to acquire.
 * @param[in]  acquireMode  Acquiring mode (0 - Reset, 1- Power Cycle)
 *
 * @return  none
@@ -2338,24 +2624,24 @@ void Swd_SetActualAcquireTimeout(uint8_t acquireDUT, uint8_t acquireMode)
             {
                 case ACQUIRE_RESET:
                     /* reset acquire */
-                    acquireTimeout = PSOC5_AQUIRE_TIMEOUT_RESET_TICKS;
+                    acquireTimeout = PSOC3_5_AQUIRE_TIMEOUT_RESET_TICKS;
                     break;
 
                 case ACQUIRE_POWER_CYCLE:
                     /* PowerCycle mode acquire. */
                     if (KitIsMiniProg())
                     {
-                        acquireTimeout = PSOC5_AQUIRE_TIMEOUT_POWER_CYCLE_TICKS;
+                        acquireTimeout = PSOC3_5_AQUIRE_TIMEOUT_POWER_CYCLE_TICKS;
                     }
                     else
                     {
                         /* Not supported. */
-                        acquireTimeout = PSOC5_AQUIRE_TIMEOUT_POWER_CYCLE_UNSUPPORTED_TICKS;
+                        acquireTimeout = PSOC3_5_AQUIRE_TIMEOUT_POWER_CYCLE_UNSUPPORTED_TICKS;
                     }
                     break;
 
                 default:
-                    acquireTimeout = PSOC5_AQUIRE_TIMEOUT_DEFAULT_TICKS;
+                    acquireTimeout = PSOC3_5_AQUIRE_TIMEOUT_DEFAULT_TICKS;
                     break;
             }
             perceivedTimeout = acquireTimeout;
@@ -2366,9 +2652,14 @@ void Swd_SetActualAcquireTimeout(uint8_t acquireDUT, uint8_t acquireMode)
             perceivedTimeout = CYW20829_AQUIRE_TIMEOUT_TICKS;
             break;
 
+        case ACQUIRE_PSoC3:
+            acquireTimeout = PSOC3_5_AQUIRE_TIMEOUT_DEFAULT_TICKS;
+            perceivedTimeout = acquireTimeout;
+            break;
         case ACQUIRE_PSoC6_BLE:
         case ACQUIRE_TVII:
         case ACQUIRE_AUTODETECT:
+        case ACQUIRE_CUSTOM:
             acquireTimeout = PSOC6_TVII_HALF_AQUIRE_TIMEOUT_TICKS;
             perceivedTimeout = PSOC6_TVII_AQUIRE_TIMEOUT_TICKS;
             break;

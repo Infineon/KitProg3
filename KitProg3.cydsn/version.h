@@ -5,7 +5,7 @@
 *  This file contains the function prototypes and constants used in
 *  the version.c.
 *
-* @version KitProg3 v2.21
+* @version KitProg3 v2.30
 */
 /*
 * Related Documents:
@@ -15,20 +15,19 @@
 *
 *
 ******************************************************************************
-* Copyright (2018), Cypress Semiconductor Corporation or a
-* subsidiary of Cypress Semiconductor Corporation. All rights
-* reserved.
+* (c) (2018-2021), Cypress Semiconductor Corporation (an Infineon company)
+* or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
 * owned by Cypress Semiconductor Corporation or one of its
-* subsidiaries ("Cypress") and is protected by and subject to worldwide
+* affiliates ("Cypress") and is protected by and subject to worldwide
 * patent protection (United States and foreign), United States copyright
 * laws and international treaty provisions. Therefore, you may use this
 * Software only as provided in the license agreement accompanying the
 * software package from which you obtained this Software ("EULA"). If
 * no EULA applies, then any reproduction, modification, translation,
-* compilation, or representation of this Software is prohibited without the
-* express written permission of Cypress.
+* compilation, or representation of this Software is prohibited without
+* the express written permission of Cypress.
 *
 * Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO
 * WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING,
@@ -37,14 +36,15 @@
 * PARTICULAR PURPOSE. Cypress reserves the right to make
 * changes to the Software without notice. Cypress does not assume any
 * liability arising out of the application or use of the Software or any
-* product or circuit described in the Software. Cypress does not
-* authorize its products for use in any products where a malfunction or
-* failure of the Cypress product may reasonably be expected to result in
-* significant property damage, injury or death ("High Risk Product"). By
-* including Cypress's product in a High Risk Product, the manufacturer
+* product or circuit described in the Software. Cypress does not authorize
+* its products for use in any products where a malfunction or failure
+* of the Cypress product may reasonably be expected to result in significant
+* property damage, injury or death ("High Risk Product").
+* By including Cypress's product in a High Risk Product, the manufacturer
 * of such system or application assumes all risk of such use and in doing
-* so agrees to indemnify Cypress against all liability
+* so agrees to indemnify Cypress against all liability.
 *****************************************************************************/
+
 #if !defined(VERSION_H)
 #define VERSION_H
 
@@ -80,9 +80,27 @@ typedef struct
     bool kitHasSpiBridge;          /**< Kit supports SPI bridging */
     bool kitHasGpioBridge;         /**< Kit supports GPIO bridging */
     bool kitIsMiniProg;            /**< Kit is MiniProg, a standalone programmer */
-    bool kitHasPowerCycleProg;  /**< Kit can be programmed during power cycle */ 
+    bool kitHasPowerCycleProg;  /**< Kit can be programmed during power cycle */
     uint8_t kitSupportedVoltages;  /**< Bitmask of supported target voltages */
 } kitprog_properties_t;
+
+/*****************************************************************************
+* KitProg3 Unique ID Definition
+*****************************************************************************/
+typedef struct __attribute__((packed))
+{
+    uint32_t signature;     // Unique ID Header (PSoC5 silicon ID) - 4 bytes
+    uint8_t mbedBoardId[4]; // mbed ID - 4 bytes
+    uint16_t uid;           // Unique kit ID - 2 bytes
+    uint8_t featureList[8]; // Kit feature list - 8 bytes
+    uint8_t name[32];       // Full kit name - 32 bytes
+    uint8_t hwId;           // Kit HW ID - 1 byte
+    uint32_t targetSiid;    // Target Silicon ID - 4 bytes
+    uint8_t verMinor;       // Record Version (1 byte for major part,
+    uint8_t verMajor;       // 1 byte for minor part) - 2 bytes
+    uint8_t reserved[6];    // Reserved for future use - 6 bytes
+    uint8_t checksum;       // Record checksum - 1 byte
+} unique_id_struct_t;
 
 /*****************************************************************************
 * External Variables
