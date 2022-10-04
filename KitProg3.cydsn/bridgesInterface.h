@@ -5,7 +5,7 @@
 *   This file contains the function prototypes, macros and constants used
 *    in bridgesInterface.c file.
 *
-* @version KitProg3 v2.30
+* @version KitProg3 v2.40
 */
 /*
 * Related Documents:
@@ -273,6 +273,7 @@ typedef struct {
     void (*UartClockSetSourceRegister)(uint8 clkSource);
     void (*UartStart)(void);
     void (*UartStop)(void);
+    void (**UartLed)(uint8_t value);
 } uart_bridge_t;
 
 /* Structure for GPIO pin*/

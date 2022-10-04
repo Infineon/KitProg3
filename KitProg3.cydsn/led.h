@@ -5,7 +5,7 @@
 *   This file contains the function prototypes to handle LED used to display
 *   device state.
 *
-* @version KitProg3 v2.30
+* @version KitProg3 v2.40
 */
 /*
 * Related Documents:

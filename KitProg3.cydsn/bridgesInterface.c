@@ -4,7 +4,7 @@
 * @brief
 *  Executable code for KitProg3
 *
-* @version KitProg3 v2.30
+* @version KitProg3 v2.40
 */
 /*
 * Related Documents:
@@ -108,6 +108,11 @@ static volatile gpio_pin_t gpioState[2u] = {
 };
 volatile bool gpioChanged = false;
 static const uint8_t waitResponse[DAP_PACKET_SIZE] = { [0] = ID_DAP_Vendor8, [1] = CMD_STAT_WAIT };
+
+static void NoUartIndication(uint8_t value);
+void (*WicedUartHciLed)(uint8_t value) = &NoUartIndication;
+void (*WicedUartPeriLed)(uint8_t value) = &NoUartIndication;
+
 static const uart_bridge_t uart[2u] = {
     {
     .uartOutEp = UART1_OUT_EP,
@@ -134,7 +139,8 @@ static const uart_bridge_t uart[2u] = {
     .UartClockStart = &Clock_UART_Start,
     .UartClockStop = &Clock_UART_Stop,
     .UartStart = &UART_Bridge_Start,
-    .UartStop = &UART_Bridge_Stop
+    .UartStop = &UART_Bridge_Stop,
+    .UartLed = &WicedUartHciLed
     },
     {
     .uartOutEp = UART2_OUT_EP,
@@ -161,12 +167,12 @@ static const uart_bridge_t uart[2u] = {
     .UartClockStart = &Clock_UART_2_Start,
     .UartClockStop = &Clock_UART_2_Stop,
     .UartStart = &UART_Bridge_2_Start,
-    .UartStop = &UART_Bridge_2_Stop
+    .UartStop = &UART_Bridge_2_Stop,
+    .UartLed = &WicedUartPeriLed,
     }
 };
 
 static uint32_t uartLastRate[2u] = {0u, 0u}; /* Last configured baud rate per UART */
-
 /******************************************************************************
 *  I2c_DsiBypassDisable
 ***************************************************************************//**
@@ -1166,47 +1172,59 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
     uint32_t num = 0u;
     switch (*request)
     {
+    case ID_DAP_ResetTarget:
+        /* Command 0x0A */
+        num = DAP_ProcessCommand(request, response);
+        break;
+
     /* CMSIS-DAP provides range 0x80-0x9F for user(vendor) commands, 002-23370 for now limits our usage to range
        0x80-0x90, some of them are implemented here, some in DAP_vendor.c */
     case ID_DAP_Vendor0:
+        /* Command 0x80 */
         num = DAP_ProcessVendorCommand(request, response);
         break;
 
     case ID_DAP_Vendor1:
+        /* Command 0x81 */
         num = DAP_ProcessVendorCommand(request, response);
         break;
 
     case ID_DAP_Vendor2:
+        /* Command 0x82 */
         num = DAP_ProcessVendorCommand(request, response);
         break;
 
     case ID_DAP_Vendor4:
+        /* Command 0x84 */
         num = DAP_ProcessVendorCommand(request, response);
         break;
 
     case CMD_ID_SET_GET_INT_SPEED:
+        /* Command 0x86 */
         num = I2cSpi_GetSetSpeed(request, response);
         break;
 
     case CMD_ID_RESTART_I2C_MSTR:
+        /* Command 0x87 */
         {
-        /* Restart HW */
-        response[PROTOCOL_CMD_OFFSET] = request[PROTOCOL_CMD_OFFSET];
-        num++;
-        if(I2c_Restart() == true)
-        {
-            response[PROTOCOL_STATUS_OFFSET] = CMD_STAT_SUCCESS;
+            /* Restart HW */
+            response[PROTOCOL_CMD_OFFSET] = request[PROTOCOL_CMD_OFFSET];
+            num++;
+            if(I2c_Restart() == true)
+            {
+                response[PROTOCOL_STATUS_OFFSET] = CMD_STAT_SUCCESS;
+            }
+            else
+            {
+                response[PROTOCOL_STATUS_OFFSET] = CMD_STAT_FAIL_OP_FAIL;
+            }
+            num++;
+            num = ((1UL << 16)| num);
         }
-        else
-        {
-            response[PROTOCOL_STATUS_OFFSET] = CMD_STAT_FAIL_OP_FAIL;
-        }
-        num++;
-        num = ((1UL << 16)| num);
         break;
-        }
 
     case CMD_ID_I2C_TRANSACTION:
+        /* Command 0x88 */
         {
             uint8_t flags = (request[PROTOCOL_FLAGS_OFFSET] & CMD_I2C_TRANSFER_TYPE_MSK) >> BYTE_MULTR_SHIFT;
             if (I2c_ParseCommand(&flags, request))
@@ -1239,12 +1257,11 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
                 response[PROTOCOL_STATUS_OFFSET] = CMD_STAT_FAIL_INV_PAR;
                 num = (1UL << 16) | 1UL;
             }
-
-        break;
         }
+        break;
 
     case CMD_ID_SPI_DATA_TRANSFER:
-        {
+        /* Command 0x89 */
         if (KitHasSpiBridge())
         {
             response[PROTOCOL_CMD_OFFSET] = request[PROTOCOL_CMD_OFFSET];
@@ -1263,7 +1280,7 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
             num++;
         }
         break;
-        }
+
     case ID_DAP_Vendor10:
         /* Command 0x8A */
         if (KitHasGpioBridge())
@@ -1277,6 +1294,7 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
             num += ((1UL << 16) | 1UL);
         }
         break;
+
     case ID_DAP_Vendor11:
         /* Command 0x8B */
         if (KitHasGpioBridge())
@@ -1290,6 +1308,7 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
             num += ((1UL << 16) | 1UL);
         }
         break;
+
     case ID_DAP_Vendor12:
         /* Command 0x8C */
         if (KitHasGpioBridge())
@@ -1303,6 +1322,7 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
             num += ((1UL << 16) | 1UL);
         }
         break;
+
     case ID_DAP_Vendor13:
         /* Command 0x8D */
         if (KitHasGpioBridge())
@@ -1316,9 +1336,12 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
             num += ((1UL << 16) | 1UL);
         }
         break;
+
     case ID_DAP_Vendor16:
+        /* Command 0x90 */
         num = DAP_ProcessVendorCommand(request, response);
         break;
+
     default:
         response[PROTOCOL_CMD_OFFSET] = ID_DAP_Invalid;
         num += ((1UL << 16) | 1UL);
@@ -1368,12 +1391,21 @@ void Bridge_PrepareUartInterface(void)
 {
     UART_Bridge_Start();
     Clock_UART_Start();
+    if (KitHasUartIndicator())
+    {
+        WicedUartHciLed = &LED_Red_Write;
+    }
 
     if ( KitHasSecondaryUart() )
     {
         UART_Bridge_2_Start();
         Clock_UART_2_Start();
+        if (KitHasUartIndicator())
+        {
+            WicedUartPeriLed = &LED_Green_Write;
+        }
     }
+
 }
 
 /*******************************************************************************
@@ -1600,9 +1632,9 @@ static void UsbUartCheckLine(void)
 {
     /* PROGTOOLS-2894: Call USBFS_IsLineChanged inside a critical section
        to avoid changing USBFS_transferState from idle state while executed */
-    uint8_t enableInterrupts = CyEnterCriticalSection();
+    uint32_t intrMask = CyUsbIntDisable();
     uint8_t lineChangedState = USBFS_IsLineChanged();
-    CyExitCriticalSection(enableInterrupts);
+    CyUsbIntEnable(intrMask);
     if((lineChangedState & USBFS_LINE_CONTROL_CHANGED) != 0u)
     {
         if (KitHasSpecialRts())
@@ -1662,6 +1694,8 @@ static void UsbUartTransmit(uint8_t comPort)
             /* Load data from endpoint only if the required space is available in the UART buffer */
             if (uartBufferAvailable >= size)
             {
+                // LED ON for dedicated port
+                (* port->UartLed)(1);
                 /* Read from USB Buffer */
                 static uint8_t usbuartTxBuffer[USBOUTPACKETSIZE];
 
@@ -1672,6 +1706,8 @@ static void UsbUartTransmit(uint8_t comPort)
                 /* Send to UART Tx */
                 port->UartPutArray(usbuartTxBuffer, size);
             }
+            // LED OFF for dedicated port
+            (* port->UartLed)(0);
         }
     }
 }
@@ -1720,6 +1756,9 @@ static void UsbUartReceive(uint8_t comPort)
             static uint8_t usbuartRxBuffer[USBINPACKETSIZE];
             if(wCount != 0u)
             {
+                // LED ON for dedicated port
+                (* port->UartLed)(1);
+
                 /* Load from software UART RX Buffer */
                 for(uint16_t index = 0; index < wCount; index++){
                     usbuartRxBuffer[index] = port->UartReadRxData();
@@ -1750,7 +1789,7 @@ static void UsbUartReceive(uint8_t comPort)
 
             static uint16_t uartInEpLastSent[2u] = {0u, 0u}; /* The last sent size is required for the ZLP generation logic */
 
-            if ( (wCount != 0u) || (uartInEpLastSent[comPort] == USBINPACKETSIZE) ) 
+            if ( (wCount != 0u) || (uartInEpLastSent[comPort] == USBINPACKETSIZE) )
             {
                 /* Send out data */
                 uint32_t intrMask = CyUsbIntDisable();
@@ -1759,6 +1798,8 @@ static void UsbUartReceive(uint8_t comPort)
 
                 uartInEpLastSent[comPort] = wCount;
             }
+            // LED OFF for dedicated port
+            (* port->UartLed)(0);
         }
     }
 }
@@ -1973,6 +2014,16 @@ void UsbUartEventSwdConnect(bool asserted)
 }
 
 
+/*******************************************************************************
+* NoUartIndication
+********************************************************************************
+* Empty function for devices with no LED UART traffick indication
+*******************************************************************************/
+static void NoUartIndication(uint8_t value)
+{
+    (void)value;
+}
+
 /******************************************************************************
 *  Gpio_DsiBypassDisable
 ***************************************************************************//**
@@ -2117,22 +2168,29 @@ uint32_t Bridge_GpioSetState(const uint8_t * request, uint8_t *response)
 
     if (valid)
     {
-        if (state == GPIO_CLEAR_STATE)
+        if (CyPins_ReadPinDriveMode((reg8 *)curPin->pinReg) == PIN_DM_DIG_HIZ)
         {
-            CyPins_ClearPin((reg8 *)curPin->pinReg);
+            response[GENERAL_RESPONSE_STATUS] = CMD_STAT_FAIL_INV_PAR;
         }
         else
         {
-            CyPins_SetPin((reg8 *)curPin->pinReg);
-        }
-        /* Update previous and current states of GPIO pin */
-        curPin->previousState = curPin->currentState;
-        uint8_t curState = (CyPins_ReadPin((reg8 *)curPin->pinReg) != 0u) ? 1u : 0u;
-        curPin->currentState = curState;
+            if (state == GPIO_CLEAR_STATE)
+            {
+                CyPins_ClearPin((reg8 *)curPin->pinReg);
+            }
+            else
+            {
+                CyPins_SetPin((reg8 *)curPin->pinReg);
+            }
+            /* Update previous and current states of GPIO pin */
+            curPin->previousState = curPin->currentState;
+            uint8_t curState = (CyPins_ReadPin((reg8 *)curPin->pinReg) != 0u) ? 1u : 0u;
+            curPin->currentState = curState;
 
-        /* Form Response */
-        response[GENERAL_RESPONSE_STATUS] = (curState == state) ? DAP_OK : DAP_ERROR;
-        gpioChanged = false;
+            /* Form Response */
+            response[GENERAL_RESPONSE_STATUS] = (curState == state) ? DAP_OK : DAP_ERROR;
+            gpioChanged = false;
+        }
     }
     else
     {
@@ -2239,4 +2297,5 @@ void GPIO_isr_Interrupt_InterruptCallback(void)
     gpioState[0].currentState = (CyPins_ReadPin((reg8 *)gpioState[0].pinReg) != 0u) ? 1u : 0u;
     gpioState[1].currentState = (CyPins_ReadPin((reg8 *)gpioState[1].pinReg) != 0u) ? 1u : 0u;
 }
+
 /* [] END OF FILE */

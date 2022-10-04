@@ -654,6 +654,7 @@
     <Group key="Interrupt">
       <Data key="00e90ac7-a5e1-42d3-a44b-1c0fb1a72a91/74b069b5-d5c5-469b-a48a-44b8a12146cd" value="I2C_UDB_I2C_IRQ" />
       <Data key="6f2d57bd-b6d0-4115-93da-ded3485bf4ed/74b069b5-d5c5-469b-a48a-44b8a12146cd" value="I2C_POT_I2C_IRQ" />
+      <Data key="12a8f55c-9de6-4b81-b213-eed554dce5de" value="isr_SWDXRES" />
       <Data key="70c77bb6-5d0a-4936-94c4-c3337e5a39d6/10dce1ed-dd83-44c0-9cff-cc3ee25204cd" value="UART_Bridge_RXInternalInterrupt" />
       <Data key="70c77bb6-5d0a-4936-94c4-c3337e5a39d6/0758f7e0-b58c-4a6b-bb59-e7d003cac7de" value="UART_Bridge_TXInternalInterrupt" />
       <Data key="244dbf99-23cc-4995-9cb0-5ca2c9325add/10dce1ed-dd83-44c0-9cff-cc3ee25204cd" value="UART_Bridge_2_RXInternalInterrupt" />
@@ -674,9 +675,11 @@
       <Data key="04178340-576c-4793-a43a-70864084b290/d91ea660-bc91-4817-b29b-2fe86c305500" value="USBFS_arb_int" />
       <Data key="04178340-576c-4793-a43a-70864084b290/dc6da32b-30f7-48b3-b8a1-dbf0214d8c83" value="USBFS_dp_int" />
       <Data key="04178340-576c-4793-a43a-70864084b290/ef9224ec-f8a6-4df0-8a49-e09ce75cefa7" value="USBFS_ep_0" />
+      <Data key="b17f8a9b-3c1e-42b0-8658-d1da6439cb63" value="GPIO_isr" />
       <Data key="b1662e29-e0a2-4121-9089-9ba96dc4870b" value="isr_UsbSuspend" />
       <Data key="bb3ad7eb-5f1c-4320-aac3-7f9849f4a94e/b6592af9-e743-4dfd-a597-27f9102033ee" value="ADC_DelSig_IRQ" />
       <Data key="d30c4cde-c5cb-414f-addc-1a19045c602c" value="isr_UsbTimeout" />
+      <Data key="d128efee-2b63-40ca-b721-bfb28acb6cf4" value="isr_RTSDelay" />
     </Group>
     <Group key="Pin">
       <Data key="0a1c460f-e353-4923-a073-a7489d1dea3c" value="LED_Amber" />

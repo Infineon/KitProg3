@@ -4,7 +4,7 @@
 * @brief
 *  This file provides the source code to handle version information.
 *
-* @version KitProg3 v2.30
+* @version KitProg3 v2.40
 */
 /*
 * Related Documents:
@@ -52,7 +52,7 @@
 
 
 #define VER_MAJOR                        (2u)
-#define VER_MINOR                        (30u)
+#define VER_MINOR                        (40u)
 
 /*****************************************************************************
 * Data Structure Definition
@@ -169,6 +169,19 @@ void MarkPowerControlFaulty(void)
 bool KitHasThreeLeds(void)
 {
     return kitprogConfiguration[kitProgHwId].kitHasThreeLeds;
+}
+
+/******************************************************************************
+*  KitHasUartIndicator
+***************************************************************************//**
+* Check if current kit supports UART LED indication
+*
+* @return  True if kit has LED UART indication
+*
+******************************************************************************/
+bool KitHasUartIndicator(void)
+{
+    return kitprogConfiguration[kitProgHwId].kitHasUartIndicator;
 }
 
 /******************************************************************************

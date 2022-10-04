@@ -5,7 +5,7 @@
 *  This file contains the function prototypes and constants used in
 *  the swd.c.
 *
-* @version KitProg3 v2.30
+* @version KitProg3 v2.40
 */
 /*
 * Related Documents:
@@ -101,14 +101,14 @@
 #define BITBAND_SRAM_REF            (CYREG_SRAM_DATA_MBASE)
 #define BITBAND_SRAM_BASE           (CYREG_SRAM_DATA_MBASE + 0x2000000u)
 
-#define SWD_DATA_BIT_B0             (*((volatile uint8_t *)(((BITBAND_SRAM_BASE) + ((BIT_ADDRESS)-(BITBAND_SRAM_REF))*32u + (0u*4u)))))
-#define SWD_DATA_BIT_B1             (*((volatile uint8_t *)(((BITBAND_SRAM_BASE) + ((BIT_ADDRESS)-(BITBAND_SRAM_REF))*32u + (1u*4u)))))
-#define SWD_DATA_BIT_B2             (*((volatile uint8_t *)(((BITBAND_SRAM_BASE) + ((BIT_ADDRESS)-(BITBAND_SRAM_REF))*32u + (2u*4u)))))
-#define SWD_DATA_BIT_B3             (*((volatile uint8_t *)(((BITBAND_SRAM_BASE) + ((BIT_ADDRESS)-(BITBAND_SRAM_REF))*32u + (3u*4u)))))
-#define SWD_DATA_BIT_B4             (*((volatile uint8_t *)(((BITBAND_SRAM_BASE) + ((BIT_ADDRESS)-(BITBAND_SRAM_REF))*32u + (4u*4u)))))
-#define SWD_DATA_BIT_B5             (*((volatile uint8_t *)(((BITBAND_SRAM_BASE) + ((BIT_ADDRESS)-(BITBAND_SRAM_REF))*32u + (5u*4u)))))
-#define SWD_DATA_BIT_B6             (*((volatile uint8_t *)(((BITBAND_SRAM_BASE) + ((BIT_ADDRESS)-(BITBAND_SRAM_REF))*32u + (6u*4u)))))
-#define SWD_DATA_BIT_B7             (*((volatile uint8_t *)(((BITBAND_SRAM_BASE) + ((BIT_ADDRESS)-(BITBAND_SRAM_REF))*32u + (7u*4u)))))
+#define SWD_DATA_BIT_B0             (*((volatile uint8_t *)(BITBAND_SRAM_BASE + ((BIT_ADDRESS-BITBAND_SRAM_REF)*32u) + (0u*4u))))
+#define SWD_DATA_BIT_B1             (*((volatile uint8_t *)(BITBAND_SRAM_BASE + ((BIT_ADDRESS-BITBAND_SRAM_REF)*32u) + (1u*4u))))
+#define SWD_DATA_BIT_B2             (*((volatile uint8_t *)(BITBAND_SRAM_BASE + ((BIT_ADDRESS-BITBAND_SRAM_REF)*32u) + (2u*4u))))
+#define SWD_DATA_BIT_B3             (*((volatile uint8_t *)(BITBAND_SRAM_BASE + ((BIT_ADDRESS-BITBAND_SRAM_REF)*32u) + (3u*4u))))
+#define SWD_DATA_BIT_B4             (*((volatile uint8_t *)(BITBAND_SRAM_BASE + ((BIT_ADDRESS-BITBAND_SRAM_REF)*32u) + (4u*4u))))
+#define SWD_DATA_BIT_B5             (*((volatile uint8_t *)(BITBAND_SRAM_BASE + ((BIT_ADDRESS-BITBAND_SRAM_REF)*32u) + (5u*4u))))
+#define SWD_DATA_BIT_B6             (*((volatile uint8_t *)(BITBAND_SRAM_BASE + ((BIT_ADDRESS-BITBAND_SRAM_REF)*32u) + (6u*4u))))
+#define SWD_DATA_BIT_B7             (*((volatile uint8_t *)(BITBAND_SRAM_BASE + ((BIT_ADDRESS-BITBAND_SRAM_REF)*32u) + (7u*4u))))
 
 /* Bit banding of the peripheral addresses for flexibility in addressing SWDIO and SWDCLK */
 /* Convert Peripheral address to peripheral bit map region */
@@ -116,11 +116,11 @@
 #define BITBAND_PERI_BASE           (0x42000000u)
 
 #define SWD_BITS                    (TCLK_SWDCLK__DR)
-#define SWD_SDA                     (*((volatile uint8_t *)(((BITBAND_PERI_BASE) + ((SWD_BITS)-(BITBAND_PERI_REF))*32u + ((TMS_SWDIO_SHIFT)*4u)))))
-#define SWD_SCK                     (*((volatile uint8_t *)(((BITBAND_PERI_BASE) + ((SWD_BITS)-(BITBAND_PERI_REF))*32u + ((TCLK_SWDCLK_SHIFT)*4u)))))
-#define SDA_PS                      (*((volatile uint8_t *)(((BITBAND_PERI_BASE) + ((TMS_SWDIO__PS)-(BITBAND_PERI_REF))*32u + ((TMS_SWDIO_SHIFT)*4u)))))
-#define SCL_PS                      (*((volatile uint8_t *)((((BITBAND_PERI_BASE) + ((TCLK_SWDCLK__PS)-(BITBAND_PERI_REF))*32u + ((TCLK_SWDCLK_SHIFT)*4u))))))
-#define XRES_PS                     (*((volatile uint8_t *)((((BITBAND_PERI_BASE) + ((SWDXRES__PS)-(BITBAND_PERI_REF))*32u + ((SWDXRES_SHIFT)*4u))))))
+#define SWD_SDA                     (*((volatile uint8_t *)(BITBAND_PERI_BASE + ((SWD_BITS        - BITBAND_PERI_REF)*32u) + ((TMS_SWDIO_SHIFT)*4u))))
+#define SWD_SCK                     (*((volatile uint8_t *)(BITBAND_PERI_BASE + ((SWD_BITS        - BITBAND_PERI_REF)*32u) + ((TCLK_SWDCLK_SHIFT)*4u))))
+#define SDA_PS                      (*((volatile uint8_t *)(BITBAND_PERI_BASE + (((TMS_SWDIO__PS)   - BITBAND_PERI_REF)*32u) + ((TMS_SWDIO_SHIFT)*4u))))
+#define SCL_PS                      (*((volatile uint8_t *)(BITBAND_PERI_BASE + (((TCLK_SWDCLK__PS) - BITBAND_PERI_REF)*32u) + ((TCLK_SWDCLK_SHIFT)*4u))))
+#define XRES_PS                     (*((volatile uint8_t *)(BITBAND_PERI_BASE + (((SWDXRES__PS)     - BITBAND_PERI_REF)*32u) + ((SWDXRES_SHIFT)*4u))))
 
 #define SWD_SET_SCK_LO              ((SWD_SCK) = 0u)
 #define SWD_SET_SCK_HI              ((SWD_SCK) = 1u)

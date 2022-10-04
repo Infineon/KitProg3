@@ -5,7 +5,7 @@
 *   This file provides the source code to handle LEDs used to display device
 *   state.
 *
-* @version KitProg3 v2.30
+* @version KitProg3 v2.40
 */
 /*
 * Related Documents:
@@ -88,9 +88,19 @@ void Led_Init(void)
     ShiftReg_LED_Amber_Start();
     if (!KitHasThreeLeds())
     {
+        if (!KitHasUartIndicator()) {
         /* Set unused Red and Green LEDs pins to Hi-Z to save power */
         CyPins_SetPinDriveMode(LED_Red_0, PIN_DM_ALG_HIZ);
         CyPins_SetPinDriveMode(LED_Green_0, PIN_DM_ALG_HIZ);
+        }
+        else
+        {
+            /* Reuse status 2 LEDs for devices with UART indication supported */
+            LED_Green_BYP = (uint8_t)(LED_Green_BYP & ~LED_Green_MASK);
+            LED_Red_BYP = (uint8_t)(LED_Red_BYP & ~ LED_Red_MASK);
+            CyPins_SetPinDriveMode(LED_Red_0, PIN_DM_OD_HI);
+            CyPins_SetPinDriveMode(LED_Green_0, PIN_DM_OD_HI);
+        }
     }
     else
     {

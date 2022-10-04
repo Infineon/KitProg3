@@ -4,7 +4,7 @@
 * @brief
 *  Executable code for KitProg3
 *
-* @version KitProg3 v2.30
+* @version KitProg3 v2.40
 */
 /*
 * Related Documents:
@@ -58,9 +58,10 @@
 
 /* All USB-related interrupt bitmask */
 #define USB_INTERRUPT_MASK ( \
+    ((uint32)((uint32)1u << (0x1Fu & (USBFS_ARB_VECT_NUM)))) | \
     ((uint32)((uint32)1u << (0x1Fu & (USBFS_BUS_RESET_VECT_NUM)))) | \
+    ((uint32)((uint32)1u << (0x1Fu & (USBFS_DP_INTC_VECT_NUM)))) | \
     ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_0_VECT_NUM)))) | \
-    ((uint32)((uint32)1u << (0x1Fu & (USBFS_SOF_VECT_NUM)))) | \
     ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_1_VECT_NUM)))) | \
     ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_2_VECT_NUM)))) | \
     ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_3_VECT_NUM)))) | \
@@ -68,7 +69,9 @@
     ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_5_VECT_NUM)))) | \
     ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_6_VECT_NUM)))) | \
     ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_7_VECT_NUM)))) | \
-    ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_8_VECT_NUM)))) )
+    ((uint32)((uint32)1u << (0x1Fu & (USBFS_EP_8_VECT_NUM)))) | \
+    ((uint32)((uint32)1u << (0x1Fu & (USBFS_ord_int__INTC_NUMBER)))) | \
+    ((uint32)((uint32)1u << (0x1Fu & (USBFS_SOF_VECT_NUM)))) )
 
 /******************************************************************************
 *  USBFS_HandleVendorRqst
@@ -117,7 +120,7 @@ uint8 USBFS_HandleVendorRqst(void)
     /*  Secondary ID                                   */   0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
     /*  Reserved                                       */   0x00u, 0x00u, 0x00u, 0x00u, 0x00u,
     };
-    
+
     /* MS OS Configurational Descriptor Dual Uart, issued only when device is in */
     /* dual uart mode with only programming (#0) interface on bulk endpoints     */
     static const uint8_t MSOS_CONFIGURATION_DESCR_DUAL_UART[0x28u] = {
@@ -189,7 +192,7 @@ uint8 USBFS_HandleVendorRqst(void)
         switch (CY_GET_REG8(USBFS_wIndexLo))
         {
         case WCID_READ_1:
-            if (((CY_GET_REG8(USBFS_wValueLo)) == 0x00u) && 
+            if (((CY_GET_REG8(USBFS_wValueLo)) == 0x00u) &&
                 ((mode == MODE_BULK) || (mode == MODE_BULK2UARTS)))
             {
                 USBFS_currentTD.pData = (uint8_t *) &WINUSB_DESCR_ZERO_INTERFACE[0u];
@@ -208,23 +211,23 @@ uint8 USBFS_HandleVendorRqst(void)
             break;
 
         case WCID_READ_2:
-            if (mode == MODE_BULK) 
+            if (mode == MODE_BULK)
             {
                 USBFS_currentTD.pData = (uint8_t *) &MSOS_CONFIGURATION_DESCR_BULK[0u];
                 USBFS_currentTD.count = MSOS_CONFIGURATION_DESCR_BULK[0u];
                 requestHandled  = USBFS_InitControlRead();
-            } 
+            }
             else if (mode == MODE_HID)
             {
                 USBFS_currentTD.pData = (uint8_t *) &MSOS_CONFIGURATION_DESCR_HID[0u];
                 USBFS_currentTD.count = MSOS_CONFIGURATION_DESCR_HID[0u];
-                requestHandled  = USBFS_InitControlRead();  
+                requestHandled  = USBFS_InitControlRead();
             }
             else if (mode == MODE_BULK2UARTS)
             {
                 USBFS_currentTD.pData = (uint8_t *) &MSOS_CONFIGURATION_DESCR_DUAL_UART[0u];
                 USBFS_currentTD.count = MSOS_CONFIGURATION_DESCR_DUAL_UART[0u];
-                requestHandled  = USBFS_InitControlRead();  
+                requestHandled  = USBFS_InitControlRead();
             }
             else
             {
@@ -237,7 +240,7 @@ uint8 USBFS_HandleVendorRqst(void)
             break;
         }
     }
-   
+
 
 
     return (requestHandled);
@@ -305,8 +308,12 @@ void PushToRequestBuffer(void)
 {
     if (TryLock(&USB_Mutex))
     {
+        if (USB_RequestPostponed)
+        {
+            /* clear request postponed flag */
+            USB_RequestPostponed = false;
+        }
         bool cachedUsbRequestBufferFull = USB_RequestBufferFull;
-        
         if ((USBFS_GetEPAckState(CMSIS_BULK_OUT_EP) != 0u) && (!cachedUsbRequestBufferFull))
         {
             /* ACKed transaction and buffer is not overflow */
@@ -314,7 +321,6 @@ void PushToRequestBuffer(void)
             uint32_t intrMask = CyUsbIntDisable();
             uint16_t receiveSize = USBFS_ReadOutEP(CMSIS_BULK_OUT_EP, USB_Request[USB_RequestIn], DAP_PACKET_SIZE);
             CyUsbIntEnable(intrMask);
-
             if (receiveSize != 0u)
             {
                 if (USB_Request[USB_RequestIn][0] == ID_DAP_TransferAbort)
@@ -331,15 +337,9 @@ void PushToRequestBuffer(void)
                     if (USB_RequestIn == USB_RequestOut)
                     {
                         /* Request buffer full */
-                        cachedUsbRequestBufferFull = true;
+                        USB_RequestBufferFull = true;
                     }
                 }
-            }
-
-            if (USB_RequestPostponed)
-            {
-                /* clear request postponed flag */
-                USB_RequestPostponed = false;
             }
         }
         else
@@ -347,7 +347,6 @@ void PushToRequestBuffer(void)
             /* transaction not yet ACKed or there is no free space in request buffer */
             USB_RequestPostponed = true;
         }
-        USB_RequestBufferFull = cachedUsbRequestBufferFull;
         Unlock(&USB_Mutex);
     }
     else
@@ -367,38 +366,35 @@ void PopFromResponseBuffer(void)
 {
     if (TryLock(&USB_Mutex))
     {
-        bool cachedUsbRequestBufferFull = USB_RequestBufferFull;
+        if (USB_ResponsePostponed)
+        {
+            /* clear response postponed flag */
+            USB_ResponsePostponed = false;
+        }
         if (USBFS_GetEPState(CMSIS_BULK_IN_EP) == USBFS_IN_BUFFER_EMPTY)
         {
+            bool cachedUsbRequestBufferFull = USB_RequestBufferFull;
             if ((USB_ResponseOut != USB_ResponseIn) || cachedUsbRequestBufferFull)
             {
                 USB_ResponseIdle = false;
                 uint32_t intrMask = CyUsbIntDisable();
                 USBFS_LoadInEP(CMSIS_BULK_IN_EP, USB_Response[USB_ResponseOut], (uint16_t)(USB_ResponseLen[USB_ResponseOut]));
                 CyUsbIntEnable(intrMask);
-
                 uint32_t n = USB_ResponseOut + 1u;
                 if (n == DAP_PACKET_COUNT)
                 {
                     n = 0u;
                 }
                 USB_ResponseOut = n;
-
                 if (cachedUsbRequestBufferFull)
                 {
                     /* clear overflow flag */
-                    cachedUsbRequestBufferFull = false;
+                    USB_RequestBufferFull = false;
                 }
             }
             else
             {
                 USB_ResponseIdle = true;
-            }
-
-            if (USB_ResponsePostponed)
-            {
-            /* clear response postponed flag */
-            USB_ResponsePostponed = false;
             }
         }
         else
@@ -406,8 +402,6 @@ void PopFromResponseBuffer(void)
             /* transaction was postponed due EP is still not empty */
             USB_ResponsePostponed = true;
         }
-        
-        USB_RequestBufferFull = cachedUsbRequestBufferFull;
         Unlock(&USB_Mutex);
     }
     else

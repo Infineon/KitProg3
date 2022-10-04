@@ -1,13 +1,11 @@
-### KitProg3 v2.30.0 Release Notes
+### KitProg3 v2.40.0 Release Notes
 
 KitProg3 is our low-level communication firmware for programming and debugging. It provides communication between a programming tool (such as CYPRESS™ Programmer or PSoC™ Programmer) and a target, such as a PSoC™ 6 MCU. KitProg3 supports a variety of development kits. It is also the communication firmware found in the MiniProg4 debug probe.
 Our development kits have KitProg3 firmware installed to provide the necessary communication between the host and target. As a result, when you plug the kit into your host computer, programming and debugging just work.
 
 ### New Features
 
-- Adds support of external serial memory flashing of PSoC™ 6 MCUs kits via Serial Flash Discoverable Parameters (SFDP) standard in DAPLink mode.  It allows to query the attached flash memory at runtime to determine out how to communicate with the device and get memory-specific data directly from the memory instead of configuring them in QSPI Configurator. 
-- Implements getting kit info from Unique ID record (only if kit supports this record)
-- Adds support of PSoC™ 3 targets for MiniProg4 debug probe with PSoC™ Programmer tool (you should wait for a newer PSoC™ Programmer version with support of this KitProg3 version, expected soon.)
+- Adds support of XMC7xxx, PSoC™ 4000T devices
 - Bugs fixing
 
 ### Known Issues
@@ -25,22 +23,19 @@ Our development kits have KitProg3 firmware installed to provide the necessary c
 ### More information
 
 -   [fw-loader
-    README.md](https://github.com/cypresssemiconductorco/Firmware-loader/blob/master/README.md)
+    README.md](https://github.com/Infineon/Firmware-loader/blob/master/README.md)
 
--   [Fw-loader Release Notes](https://github.com/cypresssemiconductorco/Firmware-loader/blob/master/RELEASE.MD)
+-   [Fw-loader Release Notes](https://github.com/Infineon/Firmware-loader/blob/master/RELEASE.MD)
 
 -   [Kitprog3 User
-    Guide](https://www.cypress.com/documentation/development-kitsboards/kitprog-user-guide)
+    Guide](https://www.infineon.com/dgdl/Infineon-KitProg3_User_Guide-UserManual-v01_00-EN.pdf?fileId=8ac78c8c7d0d8da4017d0f01221f1853)
 
--   [KitProg Host Protocol Interface](https://www.cypress.com/file/520056/download)
+-   [KitProg Host Protocol Interface](https://www.infineon.com/dgdl/Infineon-KitProg_Host_Protocol_Interface-UserManual-v01_00-EN.pdf?fileId=8ac78c8c7d0d8da4017d0f0125c8185e)
 
 -   [ModusToolbox™ Software Environment, Quick Start Guide, Documentation, and
-    Videos](https://www.cypress.com/products/modustoolbox-software-environment)
-
--   [ModusToolbox™ Device Configurator Tool
-    Guide](https://www.cypress.com/ModusToolboxDeviceConfig)
+    Videos](https://www.infineon.com/cms/en/design-support/tools/sdk/modustoolbox-software/)
 
 -   [Cypress Semiconductor, an Infineon Technologies Company](http://www.cypress.com)
 
-© Cypress Semiconductor Corporation, 2021. This document is the property of Cypress Semiconductor Corporation, an Infineon Technologies company, and its affiliates ("Cypress"). 
+© Cypress Semiconductor Corporation, 2019-2022. This document is the property of Cypress Semiconductor Corporation, an Infineon Technologies company, and its affiliates ("Cypress").
 

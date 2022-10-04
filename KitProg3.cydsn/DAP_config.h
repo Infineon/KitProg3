@@ -561,24 +561,9 @@ It is called when the command \ref DAP_ResetTarget and is for example required
 when a device needs a time-critical unlock sequence that enables the debug port.
 \return 0 = no device specific reset sequence is implemented.\n
         1 = a device specific reset sequence is implemented.
+Note. Implementation of this funstion is moved to swd.c
 */
-__STATIC_INLINE uint8_t RESET_TARGET (void) {
-
-    /* preserve current reset drive mode */
-    uint8_t resetDriveMode = CyPins_ReadPinDriveMode(SWDXRES_0);
-
-    /* set XRES to low for RESET_DELAY usec*/
-    CyPins_SetPinDriveMode(SWDXRES_0, SWDXRES_DM_STRONG);
-    SWD_SET_XRES_LO;
-    CyDelayUs(RESET_DELAY);
-
-    /* set XRES hi, than restore original drive mode */
-    SWD_SET_XRES_HI;
-    CyPins_SetPinDriveMode(SWDXRES_0, resetDriveMode);
-
-    /* "1u" indicated that device reset is implemeted */
-    return (1U);
-}
+extern uint8_t RESET_TARGET (void);
 
 ///@}
 

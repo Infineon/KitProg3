@@ -4,7 +4,7 @@
 * @brief
 *  This file provides the API to handle the power control.
 *
-* @version KitProg3 v2.30
+* @version KitProg3 v2.40
 */
 /*
 * Related Documents:

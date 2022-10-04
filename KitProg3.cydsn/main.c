@@ -4,7 +4,7 @@
 * @brief
 *  main executable code for KitProg3
 *
-* @version KitProg3 v2.30
+* @version KitProg3 v2.40
 */
 /*
 * Related Documents:

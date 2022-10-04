@@ -5,7 +5,7 @@
 *  This file contains the function prototypes and constants used in
 *  the version.c.
 *
-* @version KitProg3 v2.30
+* @version KitProg3 v2.40
 */
 /*
 * Related Documents:
@@ -81,6 +81,7 @@ typedef struct
     bool kitHasGpioBridge;         /**< Kit supports GPIO bridging */
     bool kitIsMiniProg;            /**< Kit is MiniProg, a standalone programmer */
     bool kitHasPowerCycleProg;  /**< Kit can be programmed during power cycle */
+    bool kitHasUartIndicator;
     uint8_t kitSupportedVoltages;  /**< Bitmask of supported target voltages */
 } kitprog_properties_t;
 
@@ -255,6 +256,17 @@ bool KitIsMiniProg(void);
 *
 ******************************************************************************/
 bool KitHasPowerCycleProg(void);
+
+
+/******************************************************************************
+*  KitHasUartIndicator
+***************************************************************************//**
+* Check if current kit supports UART LED indication
+*
+* @return  True if kit has LED UART indication
+*
+******************************************************************************/
+bool KitHasUartIndicator(void);
 
 
 /******************************************************************************

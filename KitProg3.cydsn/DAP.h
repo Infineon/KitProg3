@@ -234,19 +234,19 @@ typedef struct {
   uint8_t     debug_port;                       // Debug Port
   uint8_t     fast_clock;                       // Fast Clock Flag
   uint8_t     padding[2];
-  uint32_t   clock_delay;                       // Clock Delay
-  uint32_t     timestamp;                       // Last captured Timestamp
+  uint32_t    clock_delay;                      // Clock Delay
+  uint32_t    timestamp;                        // Last captured Timestamp
   struct {                                      // Transfer Configuration
     uint8_t   idle_cycles;                      // Idle cycles after transfer
-    uint8_t    padding[3];
+    uint8_t   padding[3];
     uint16_t  retry_count;                      // Number of retries after WAIT response
     uint16_t  match_retry;                      // Number of retries if read value does not match
     uint32_t  match_mask;                       // Match Mask
   } transfer;
 #if (DAP_SWD != 0)
   struct {                                      // SWD Configuration
-    uint8_t    turnaround;                      // Turnaround period
-    uint8_t    data_phase;                      // Always generate Data Phase
+    uint8_t   turnaround;                       // Turnaround period
+    uint8_t   data_phase;                       // Always generate Data Phase
   } swd_conf;
 #endif
 #if (DAP_JTAG != 0)
