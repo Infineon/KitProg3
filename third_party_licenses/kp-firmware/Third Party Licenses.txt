@@ -1,0 +1,4 @@
+FOR KITPROG1, KITPROG2 FIRMWARE ONLY
+
+KitProg firmware distributed with PSoC Programmer software uses CMSIS-DAP sources.
+Please refer to page 5 in the CMSIS End User License Agreement (CMSIS-DAP EULA.pdf) to find information about BSD licence and zlib licence which cover different components of CMSIS-DAP package.

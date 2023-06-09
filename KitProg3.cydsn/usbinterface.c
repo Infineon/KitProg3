@@ -4,7 +4,7 @@
 * @brief
 *  Executable code for KitProg3
 *
-* @version KitProg3 v2.40
+* @version KitProg3 v2.50
 */
 /*
 * Related Documents:
@@ -193,7 +193,7 @@ uint8 USBFS_HandleVendorRqst(void)
         {
         case WCID_READ_1:
             if (((CY_GET_REG8(USBFS_wValueLo)) == 0x00u) &&
-                ((mode == MODE_BULK) || (mode == MODE_BULK2UARTS)))
+                (mode != MODE_HID))
             {
                 USBFS_currentTD.pData = (uint8_t *) &WINUSB_DESCR_ZERO_INTERFACE[0u];
                 USBFS_currentTD.count = WINUSB_DESCR_ZERO_INTERFACE[0u];

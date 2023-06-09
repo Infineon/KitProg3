@@ -4,7 +4,7 @@
 * @brief
 *  This file provides the source code to handle version information.
 *
-* @version KitProg3 v2.40
+* @version KitProg3 v2.50
 */
 /*
 * Related Documents:
@@ -14,7 +14,7 @@
 *
 *
 ******************************************************************************
-* (c) (2018-2021), Cypress Semiconductor Corporation (an Infineon company)
+* (c) (2018-2023), Cypress Semiconductor Corporation (an Infineon company)
 * or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
@@ -49,10 +49,11 @@
 #include "device.h"
 #include "build_number.h"
 #include "version.h"
+#include "kitprog.h"
 
 
 #define VER_MAJOR                        (2u)
-#define VER_MINOR                        (40u)
+#define VER_MINOR                        (50u)
 
 /*****************************************************************************
 * Data Structure Definition
@@ -265,6 +266,7 @@ bool KitHasSpiBridge(void)
     return kitprogConfiguration[kitProgHwId].kitHasSpiBridge;
 }
 
+
 /******************************************************************************
 *  KitHasGpioBridge
 ***************************************************************************//**
@@ -277,6 +279,7 @@ bool KitHasGpioBridge(void)
 {
     return kitprogConfiguration[kitProgHwId].kitHasGpioBridge;
 }
+
 
 /******************************************************************************
 *  KitIsMiniProg
@@ -292,11 +295,97 @@ bool KitIsMiniProg(void)
 }
 
 /******************************************************************************
-*  KitIsMiniProg
+*  KitPrimaryUartHwControl
 ***************************************************************************//**
-* Check if kit is standalone programmer (MiniProg4).
+* Check if current value of UART flow control for Primary UART.
 *
-* @return  True if kit is MiniProg4.
+* @return  True if on.
+*
+******************************************************************************/
+bool KitPrimaryUartHwControl(void)
+{
+    return (currentFirstUartMode == DEFAULT_UART_FLOW_CONTROL) ? KitHasUartHwFlowControl() : 
+    ((currentFirstUartMode == UART_NO_FLOW_CONTROL) ? false : true);
+}
+
+
+/******************************************************************************
+*  KitSecondaryUartHwControl
+***************************************************************************//**
+* Check if current value of UART flow control for Secondary UART.
+*
+* @return  True if on.
+*
+******************************************************************************/
+bool KitSecondaryUartHwControl(void)
+{
+    return (currentSecondUartMode == DEFAULT_UART_FLOW_CONTROL) ? KitHasUartHwFlowControl() : 
+    ((currentSecondUartMode == UART_NO_FLOW_CONTROL) ? false : true);
+}
+
+/******************************************************************************
+*  GetKitSupportedSpiSs
+***************************************************************************//**
+* Get bitmask of supported SPI SS pins.
+*
+* @return  Bitmask with supported SPI SS pins
+*          SPI_SS0_SUPPORT_MASK, SPI_SS1_SUPPORT_MASK,
+*          SPI_SS2_SUPPORT_MASK
+*
+******************************************************************************/
+uint8_t GetKitSupportedSpiSs(void)
+{
+    return (kitprogConfiguration[kitProgHwId].kitSupportedSpiSlaveSelect & SPI_SS_SUPPORT_MASK);
+}
+
+/******************************************************************************
+*  GetKitSupportedGpioPins
+***************************************************************************//**
+* Get bitmask of supported GPIO pins.
+*
+* @return  Bitmask with supported GPIO pins
+*          PIN_3_5_SUPPORT_MASK, PIN_3_6_SUPPORT_MASK,
+*
+******************************************************************************/
+uint8_t GetKitSupportedGpioPins(void)
+{
+    return (kitprogConfiguration[kitProgHwId].kitSupportedGpioPins & (PIN_3_5_SUPPORT_MASK | PIN_3_6_SUPPORT_MASK));
+}
+
+/******************************************************************************
+*  KitSuportsSwd
+***************************************************************************//**
+* Check if kit supports SWD protocol.
+*
+* @return  True if kit supports SWD.
+*
+******************************************************************************/
+bool KitSuportsSwd(void)
+{
+    return ((kitprogConfiguration[kitProgHwId].kitProtocolSupport & 
+            SWD_PROTOCOL_SUPPORT_MASK) == SWD_PROTOCOL_SUPPORT_MASK);
+}
+
+/******************************************************************************
+*  KitSuportsJTAG
+***************************************************************************//**
+* Check if kit supports JTAG protocol.
+*
+* @return  True if kit supports JTAG.
+*
+******************************************************************************/
+bool KitSuportsJtag(void)
+{
+    return ((kitprogConfiguration[kitProgHwId].kitProtocolSupport & 
+            JTAG_PROTOCOL_SUPPORT_MASK) == JTAG_PROTOCOL_SUPPORT_MASK);
+}
+
+/******************************************************************************
+*  KitHasPowerCycleProg
+***************************************************************************//**
+* Check if kit is supports programming during power cycle.
+*
+* @return  True if kit supports programming during power cycle.
 *
 ******************************************************************************/
 bool KitHasPowerCycleProg(void)
@@ -321,6 +410,19 @@ uint8_t GetKitSupportedVoltages(void)
     return ( regulatorFaulty ? V_NO_SUPPORT_MASK : kitprogConfiguration[kitProgHwId].kitSupportedVoltages );
 }
 
+
+/******************************************************************************
+*  KitSupportsHciPeriUart
+***************************************************************************//**
+* Check if kit supports HCI and Peripheral UARTs.
+*
+* @return if kit supports HCI and Peripheral UARTs.
+*
+******************************************************************************/
+bool KitSupportsHciPeriUart(void)
+{
+    return kitprogConfiguration[kitProgHwId].kitHasHciPeripheralUarts;
+}
 
 /******************************************************************************
 *  MarkRegulatorFaulty

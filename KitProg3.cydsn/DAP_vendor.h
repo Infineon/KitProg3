@@ -5,7 +5,7 @@
 *   This file contains the function prototypes and constants used in
 *   the DAP_vendor.c
 *
-* @version KitProg3 v2.40
+* @version KitProg3 v2.50
 */
 /*
 * Related Documents:
@@ -15,7 +15,7 @@
 *
 *
 ******************************************************************************
-* (c) (2018-2021), Cypress Semiconductor Corporation (an Infineon company)
+* (c) (2018-2023), Cypress Semiconductor Corporation (an Infineon company)
 * or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
@@ -54,9 +54,9 @@
 #include "swd.h"
 
 
-#define KHPI_VER                            "2.03"
+#define KHPI_VER                            "2.04"
 #define KHPI_VER_MAJOR                      (2u)
-#define KHPI_VER_MINOR                      (3u)
+#define KHPI_VER_MINOR                      (4u)
 
 #define CMD_STAT_SUCCESS                    (0x00u)
 #define CMD_STAT_WAIT                       (0x01u)
@@ -108,8 +108,15 @@
 
 /* Minimum divider that can be applied to SPI clock */
 #define SPI_DIVIDER_MIN                     (0x02u)
+
+/* Supported SPI SS pins */
 #define SPI_SS_LINES_MASK                   (0x07u)
+#define SPI_SS_LINES_E_MASK                 (0x01u)
+
 #define I2C_SPEEDS_MASK                     (0x0fu)
+
+#define GPIO_PIN_35_MASK                    (0x10u)
+#define GPIO_PIN_36_MASK                    (0x20u)
 
 #define CMD_POWER_SET                       (0x10u)
 #define CMD_POWER_GET                       (0x11u)
@@ -131,6 +138,9 @@
 #define UNIQUE_ID_VALID                     (0x00u)
 #define UNIQUE_ID_INVALID                   (0xFFu)
 #define UNIQUE_ID_ADDRESS                   (CYDEV_EE_BASE + 16u)
+#define PRI_UART_FLOW_CTRL_BYTE             (8u)
+#define SEC_UART_FLOW_CTRL_BYTE             (9u)
+#define UART_MODE_ADDRESS                   (CYDEV_EE_BASE + PRI_UART_FLOW_CTRL_BYTE)
 #define CRC8_2S_COMP_BASE                   (0x0100u)
 
 /* Enum for Basic DAP Vendor Response */
@@ -155,6 +165,15 @@ enum
     GPIO_REQUEST_PIN = 1u,
     GPIO_REQUEST_STATE_MODE = 2u,
 };
+
+/* Enum for Get/Set UART flow control mode */
+enum
+{
+    CONFIG_UART_REQUEST_COMMAND = 1u,
+    CONFIG_UART_REQUEST_PORT = 2u,
+    CONFIG_UART_REQUEST_MODE = 3u,
+};
+
 /* Function prototypes */
 void HandleReset(void);
 void HandleModeSwitch(const uint8_t *request, uint8_t *response);
@@ -165,6 +184,7 @@ uint32_t GetSetPower(const uint8_t *request, uint8_t *response);
 void WaitVendorResponse(void);
 uint32_t SetAcquireOption(const uint8_t *request, uint8_t *response);
 uint32_t GetUidData(const uint8_t *request, uint8_t *response);
+extern uint32_t GetSetHwContol(const uint8_t *request, uint8_t *response);
 
 #endif /* DAP_VENDOR_H */
 

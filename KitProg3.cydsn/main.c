@@ -4,7 +4,7 @@
 * @brief
 *  main executable code for KitProg3
 *
-* @version KitProg3 v2.40
+* @version KitProg3 v2.50
 */
 /*
 * Related Documents:
@@ -14,7 +14,7 @@
 *
 *
 ******************************************************************************
-* (c) (2018-2021), Cypress Semiconductor Corporation (an Infineon company)
+* (c) (2018-2023), Cypress Semiconductor Corporation (an Infineon company)
 * or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
@@ -74,7 +74,8 @@ volatile bool usbResetDetected  = false;
 
 bool usbDapReadFlag = false; /* This global variable is set in USBFS_episr.c to signal EP2 interrupt. */
 
-
+volatile uint8_t currentFirstUartMode;
+volatile uint8_t currentSecondUartMode;
 /*******************************************************************************
 * main
 ********************************************************************************
@@ -94,7 +95,7 @@ int main(void)
 
     /* Disable SPI for kits without SPI support */
     /* TODO move code below to SPI initialization */
-    if ( !KitHasSpiBridge() )
+    if (!KitHasSpiBridge())
     {
         SPI_SS_0_SetDriveMode(SPI_SS_0_DM_DIG_HIZ);
         SPI_SS_1_SetDriveMode(SPI_SS_1_DM_DIG_HIZ);
@@ -104,6 +105,16 @@ int main(void)
         SPI_MISO_SetDriveMode(SPI_MISO_DM_DIG_HIZ);
     }
 
+    /* EEPROM is used for the sticky functionality - the firmware remembers the last mode
+     * it was in using the data in the EEPROM. By default, the FW starts up in KitProg mode. */
+    EEPROM_ModeStorage_Start();
+
+    /* Provide a 10us delay for EEPROM data to stabilize.
+     * Datasheet says 5us, set to 10us just to be sure. */
+    CyDelayUs(10u);
+    const reg8 * uartPortMode = (reg8 *)UART_MODE_ADDRESS;
+    currentFirstUartMode = uartPortMode[0u];
+    currentSecondUartMode = uartPortMode[1u];
     /* If CTS is not connected set the pin to Resistive Pull Down in order to avoid noise impact */
     UartCtsRtsPinInit(); /* CDT 248428 */
 
@@ -112,6 +123,10 @@ int main(void)
     if (KitHasSpiBridge())
     {
         Bridge_PrepareSpiInterface();
+        if (KitHasGpioBridge())
+        {
+            CyPins_SetPinDriveMode(GPIO_SPI_SS_2_GPIO_1, CY_PINS_DM_DIG_HIZ);
+        }
     }
 
     if (KitHasGpioBridge())
@@ -138,15 +153,6 @@ int main(void)
     /***********************************************************************************/
     /********************* Alternative Modes Initialization ******************************/
     /***********************************************************************************/
-    /* EEPROM is used for the sticky functionality - the firmware remembers the last mode
-     * it was in using the data in the EEPROM. By default, the FW starts up in KitProg mode. */
-
-    /* TODO shall be in System_Init() */
-    EEPROM_ModeStorage_Start();
-
-    /* Provide a 10us delay for EEPROM data to stabilize.
-     * Datasheet says 5us, set to 10us just to be sure. */
-    CyDelayUs(10u);
 
     /* EEPROM reads are direct reads and do not require an API. Set the base address and read. */
     const reg8 * modeAddress = (reg8 *)CYDEV_EE_BASE;
@@ -270,20 +276,39 @@ int main(void)
                     {
                         USBFS_Start(MODE_MP_BULK, USBFS_DWR_VDDD_OPERATION);
                     }
+                    else if (KitSupportsHciPeriUart())
+                    {
+                        USBFS_Start(MODE_BULK_HCI_PERI, USBFS_DWR_VDDD_OPERATION);
+                    }
                     else
                     {
-                        USBFS_Start(MODE_BULK, USBFS_DWR_VDDD_OPERATION);
+                        USBFS_Start(MODE_KP3_BULK, USBFS_DWR_VDDD_OPERATION);
                     }
                 }
-                else
+                else if (currentMode == MODE_HID)
                 {
                     if (KitIsMiniProg())
                     {
                         USBFS_Start(MODE_MP_HID, USBFS_DWR_VDDD_OPERATION);
                     }
+                    else if (KitSupportsHciPeriUart())
+                    {
+                        USBFS_Start(MODE_HID_HCI_PERI, USBFS_DWR_VDDD_OPERATION);
+                    }
                     else
                     {
-                        USBFS_Start(currentMode, USBFS_DWR_VDDD_OPERATION);
+                        USBFS_Start(MODE_KP3_HID, USBFS_DWR_VDDD_OPERATION);
+                    }
+                }
+                else 
+                {
+                    if (KitSupportsHciPeriUart())
+                    {
+                        USBFS_Start(MODE_BULK2UARTS_HCI_PERI, USBFS_DWR_VDDD_OPERATION);
+                    }
+                    else
+                    {
+                        USBFS_Start(MODE_KP3_BULK2UARTS, USBFS_DWR_VDDD_OPERATION);
                     }
                 }
 
@@ -457,13 +482,13 @@ int main(void)
                 /* Reset the main state machine. */
                 currState = USB_WAIT_FOR_VBUS;
 
-                while ( ModeButton_Read() == BUTTON_ASSERTED)
+                while (ModeButton_Read() == BUTTON_ASSERTED)
                 {
                      /* Wait till the user releases the Application buttons of kit. This is to
                      * protect from unintentional back to back mode switching. */
                 }
 
-                if ( KitHasTwoButtons() )
+                if (KitHasTwoButtons())
                 {
                     while (ApplicationButton_Read() == BUTTON_ASSERTED)
                     {

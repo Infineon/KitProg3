@@ -4,7 +4,7 @@
 * @brief
 *  Executable code for KitProg3
 *
-* @version KitProg3 v2.40
+* @version KitProg3 v2.50
 */
 /*
 * Related Documents:
@@ -14,7 +14,7 @@
 *
 *
 ******************************************************************************
-* (c) (2018-2021), Cypress Semiconductor Corporation (an Infineon company)
+* (c) (2018-2023), Cypress Semiconductor Corporation (an Infineon company)
 * or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
@@ -80,34 +80,48 @@ static bool transferNack = false;
 static stateI2cTransfer stateI2cOp = STATE_I2C_READY;
 
 /* Request and Response array for Bridge Interface */
-static  uint8_t bridgeRequest[BRIDGE_INTERFACE_ENDP_SIZE];
-static  uint8_t bridgeResponse[BRIDGE_INTERFACE_ENDP_SIZE];
+static uint8_t bridgeRequest[BRIDGE_INTERFACE_ENDP_SIZE];
+static uint8_t bridgeResponse[BRIDGE_INTERFACE_ENDP_SIZE];
 
-static uint8_t requestIndex;
-static uint8_t responseIndex;
+static uint8_t requestOffset;
+static uint8_t responseOffset;
 
 static uint16_t waitResponseTimer = 0u;
 
 static uint8_t bufferI2c[64u];
 
-static volatile gpio_pin_t gpioState[2u] = {
-    { /* GPIO Pin HWID 0x0D Port 3 Pin 5 */
-        .previousState = 0x00u,
-        .currentState = 0x00u,
-        .change = UNCHANGED,
-        .pin = 0x35u,
-        .pinReg = GPIO_GPIO_0,
-    },
-    { /* GPIO Pin HWID 0x0D Port 3 Pin 6 */
-        .previousState = 0x00u,
-        .currentState = 0x00u,
-        .change = UNCHANGED,
-        .pin = 0x36u,
-        .pinReg = GPIO_SPI_SS_2_GPIO_1,
-    },
+/* GPIO pin info for 3[5] (Port 3 Pin 5) */
+static volatile gpio_pin_t p35GpioPin = {
+    .previousState = 0x00u,
+    .currentState = 0x00u,
+    .change = UNCHANGED,
+    .pin = 0x35u,
+    .pinReg = GPIO_GPIO_0,
 };
+
+/* GPIO pin info for 3[6] (Port 3 Pin 6) */   
+static volatile gpio_pin_t p36GpioPin = {
+    .previousState = 0x00u,
+    .currentState = 0x00u,
+    .change = UNCHANGED,
+    .pin = 0x36u,
+    .pinReg = GPIO_SPI_SS_2_GPIO_1,
+};
+
+/* Structure populated with GPIO pin info for devices with 0x0D and 0x09 HWIDs*/
+static volatile gpio_hwid_t hwidTwoGpio = {
+    .numOfPins = 2u,
+    .pins = {[0] = &p35GpioPin, [1] = &p36GpioPin}
+};
+
+/* Structure populated with GPIO pins info for devices with 0x0F HWID*/
+static volatile gpio_hwid_t hwidOneGpio = {
+    .numOfPins = 1u,
+    .pins = {[0] = &p35GpioPin}
+};
+
 volatile bool gpioChanged = false;
-static const uint8_t waitResponse[DAP_PACKET_SIZE] = { [0] = ID_DAP_Vendor8, [1] = CMD_STAT_WAIT };
+static const uint8_t waitResponse[2u] = { [0] = ID_DAP_Vendor8, [1] = CMD_STAT_WAIT };
 
 static void NoUartIndication(uint8_t value);
 void (*WicedUartHciLed)(uint8_t value) = &NoUartIndication;
@@ -125,6 +139,7 @@ static const uart_bridge_t uart[2u] = {
     .uartRtsPinMask = UART_RTS_MASK,
     .uartRtsPinPc = UART_RTS_0,
     .uartRtsPinByp = UART_RTS__BYP,
+    .uartCtsPinPc = UART_CTS_0,
     .UartReadRxStatus = &UART_Bridge_ReadRxStatus,
     .UartClearRxBuffer = &UART_Bridge_ClearRxBuffer,
     .UartClearTxBuffer = &UART_Bridge_ClearTxBuffer,
@@ -140,7 +155,8 @@ static const uart_bridge_t uart[2u] = {
     .UartClockStop = &Clock_UART_Stop,
     .UartStart = &UART_Bridge_Start,
     .UartStop = &UART_Bridge_Stop,
-    .UartLed = &WicedUartHciLed
+    .UartLed = &WicedUartHciLed,
+    .UartHwControlFlow = &Control_Flow_En_Write,
     },
     {
     .uartOutEp = UART2_OUT_EP,
@@ -153,6 +169,7 @@ static const uart_bridge_t uart[2u] = {
     .uartRtsPinMask = UART_RTS_2_MASK,
     .uartRtsPinPc = UART_RTS_2_0,
     .uartRtsPinByp = UART_RTS_2__BYP,
+    .uartCtsPinPc = UART_CTS_2_0,
     .UartReadRxStatus = &UART_Bridge_2_ReadRxStatus,
     .UartClearRxBuffer = &UART_Bridge_2_ClearRxBuffer,
     .UartClearTxBuffer = &UART_Bridge_2_ClearTxBuffer,
@@ -169,6 +186,7 @@ static const uart_bridge_t uart[2u] = {
     .UartStart = &UART_Bridge_2_Start,
     .UartStop = &UART_Bridge_2_Stop,
     .UartLed = &WicedUartPeriLed,
+    .UartHwControlFlow = &Control_Flow_En_2_Write,
     }
 };
 
@@ -547,15 +565,15 @@ static uint32_t I2c_GenericTransactionContinue(const uint8_t *request, uint8_t *
 ******************************************************************************/
 static void I2c_CheckForResponse(const uint8_t *request, uint8_t *response)
 {
-    uint32_t num = I2c_GenericTransactionContinue(request, response);
+    uint32_t num = (uint8_t)I2c_GenericTransactionContinue(request, response);
 
     if (num != 0u)
     {
         /* move response index as execution of command is finished */
+        responseOffset += (uint8_t)num;
         if (cmdCount != 0u)
         {
             cmdCount--;
-            responseIndex += (uint8_t)num;
         }
 
         /* if it was the last command in the execute_commands request or one command in request finish it */
@@ -573,6 +591,7 @@ static void I2c_CheckForResponse(const uint8_t *request, uint8_t *response)
         {
             uint8_t immBridgeRequest[BRIDGE_INTERFACE_ENDP_SIZE];
             uint8_t immBridgeResponse[BRIDGE_INTERFACE_ENDP_SIZE];
+            uint16_t immBridgeResponseSize = 0u;
 
             uint32_t intrMask = CyUsbIntDisable();
             (void)USBFS_ReadOutEP(BRIDGE_INTERFACE_OUT_ENDP, immBridgeRequest, receiveSize);
@@ -586,6 +605,7 @@ static void I2c_CheckForResponse(const uint8_t *request, uint8_t *response)
                 //if restart clear buffers, move indexes to 0, clear i2cCount
                 /* restart HW and record response */
                 immBridgeResponse[PROTOCOL_STATUS_OFFSET] = (I2c_Restart() ? CMD_STAT_SUCCESS : CMD_STAT_FAIL_OP_FAIL);
+                immBridgeResponseSize += 2u;
 
                 commandExecution = NOTHING_TO_HANDLE;
                 stateI2cOp = STATE_I2C_READY;
@@ -594,10 +614,11 @@ static void I2c_CheckForResponse(const uint8_t *request, uint8_t *response)
             else
             {
                 immBridgeResponse[PROTOCOL_CMD_OFFSET] = CMD_INVALID;
+                immBridgeResponseSize++;
             }
 
             intrMask = CyUsbIntDisable();
-            USBFS_LoadInEP(BRIDGE_INTERFACE_IN_ENDP, immBridgeResponse, BRIDGE_INTERFACE_ENDP_SIZE);
+            USBFS_LoadInEP(BRIDGE_INTERFACE_IN_ENDP, immBridgeResponse, immBridgeResponseSize);
             CyUsbIntEnable(intrMask);
         }
     }
@@ -1027,11 +1048,11 @@ void Bridge_InterfaceHandler(void)
             {
                 waitResponseTimer = Timer_CSTick_ReadCounter();
                 uint32_t intrMask = CyUsbIntDisable();
-                USBFS_LoadInEP(BRIDGE_INTERFACE_IN_ENDP, waitResponse, BRIDGE_INTERFACE_ENDP_SIZE);
+                USBFS_LoadInEP(BRIDGE_INTERFACE_IN_ENDP, waitResponse, sizeof(waitResponse)/sizeof(uint8_t));
                 CyUsbIntEnable(intrMask);
             }
-            /*  Check if any response is sent from slave device */
-            I2c_CheckForResponse(&bridgeRequest[requestIndex], &bridgeResponse[responseIndex]);
+            /*  Check if any response was sent from slave device */
+            I2c_CheckForResponse(&bridgeRequest[requestOffset], &bridgeResponse[responseOffset]);
             break;
 
             case STATE_I2C_READY:
@@ -1061,8 +1082,8 @@ void Bridge_InterfaceHandler(void)
 
                                 /* init variables for request handling */
                                 initCommand = true;
-                                requestIndex = 0u;
-                                responseIndex = 0u;
+                                requestOffset = 0u;
+                                responseOffset = 0u;
                                 /* execute command */
                                 Bridge_ExecuteCommands();
                             }
@@ -1075,7 +1096,7 @@ void Bridge_InterfaceHandler(void)
                         /* normal Response for other commands send to bridge if i2c transaction not started */
                         {
                             uint32_t intrMask = CyUsbIntDisable();
-                            USBFS_LoadInEP(BRIDGE_INTERFACE_IN_ENDP, bridgeResponse, BRIDGE_INTERFACE_ENDP_SIZE);
+                            USBFS_LoadInEP(BRIDGE_INTERFACE_IN_ENDP, bridgeResponse, (responseOffset < BRIDGE_INTERFACE_ENDP_SIZE)? (uint16_t)responseOffset : BRIDGE_INTERFACE_ENDP_SIZE);
                             CyUsbIntEnable(intrMask);
                         }
                         commandExecution = NOTHING_TO_HANDLE;
@@ -1105,25 +1126,25 @@ void Bridge_ExecuteCommands(void)
 {
     if (initCommand)
     {
-        if (bridgeRequest[requestIndex] == ID_DAP_ExecuteCommands)
+        if (bridgeRequest[requestOffset] == ID_DAP_ExecuteCommands)
         {
-            bridgeResponse[responseIndex]= bridgeRequest[requestIndex];
+            bridgeResponse[responseOffset]= bridgeRequest[requestOffset];
 
-            responseIndex++;
-            requestIndex++;
+            responseOffset++;
+            requestOffset++;
 
-            cmdCount = bridgeRequest[requestIndex];
-            bridgeResponse[responseIndex] = (uint8_t)cmdCount;
+            cmdCount = bridgeRequest[requestOffset];
+            bridgeResponse[responseOffset] = (uint8_t)cmdCount;
 
-            responseIndex++;
-            requestIndex++;
+            responseOffset++;
+            requestOffset++;
 
             commandExecution = STARTED;
         }
         else
         {
             /* One command to process */
-            (void)Bridge_ProcessCommand(&bridgeRequest[requestIndex], &bridgeResponse[responseIndex]);
+            responseOffset += (uint8_t)Bridge_ProcessCommand(&bridgeRequest[requestOffset], &bridgeResponse[responseOffset]);
             commandExecution = STARTED;
 
             if (stateI2cOp != STATE_I2C_RW_STARTED)
@@ -1138,13 +1159,13 @@ void Bridge_ExecuteCommands(void)
     {
         while(cmdCount != 0u)
         {
-            uint32_t num = Bridge_ProcessCommand(&bridgeRequest[requestIndex], &bridgeResponse[responseIndex]);
-            requestIndex  += (uint8_t)(num >> 16);
+            uint32_t num = Bridge_ProcessCommand(&bridgeRequest[requestOffset], &bridgeResponse[responseOffset]);
+            requestOffset += (uint8_t)(num >> 16);
             if (stateI2cOp == STATE_I2C_RW_STARTED)
             {
                 break;
             }
-            responseIndex += (uint8_t)num;
+            responseOffset += (uint8_t)num;
             cmdCount--;
 
         }
@@ -1235,17 +1256,17 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
                     stateI2cOp = STATE_I2C_RW_STARTED;
 
                     uint32_t intrMask = CyUsbIntDisable();
-                    USBFS_LoadInEP(BRIDGE_INTERFACE_IN_ENDP, waitResponse, BRIDGE_INTERFACE_ENDP_SIZE);
+                    USBFS_LoadInEP(BRIDGE_INTERFACE_IN_ENDP, waitResponse, sizeof(waitResponse)/sizeof(uint8_t));
                     CyUsbIntEnable(intrMask);
                     waitResponseTimer = Timer_CSTick_ReadCounter();
 
                 }
                 else
                 {
-                    static const uint8_t failOpResponce[BRIDGE_INTERFACE_ENDP_SIZE] = {[0] = CMD_ID_I2C_TRANSACTION, [1] = CMD_STAT_FAIL_OP_FAIL};
+                    static const uint8_t failOpResponce[2u] = {[0] = CMD_ID_I2C_TRANSACTION, [1] = CMD_STAT_FAIL_OP_FAIL};
                     /* Fail Responses*/
                     uint32_t intrMask = CyUsbIntDisable();
-                    USBFS_LoadInEP(BRIDGE_INTERFACE_IN_ENDP, failOpResponce, BRIDGE_INTERFACE_ENDP_SIZE);
+                    USBFS_LoadInEP(BRIDGE_INTERFACE_IN_ENDP, failOpResponce, sizeof(failOpResponce)/sizeof(uint8_t));
                     CyUsbIntEnable(intrMask);
                     commandExecution = NOTHING_TO_HANDLE;
                 }
@@ -1265,14 +1286,23 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
         if (KitHasSpiBridge())
         {
             response[PROTOCOL_CMD_OFFSET] = request[PROTOCOL_CMD_OFFSET];
-            response[PROTOCOL_STATUS_OFFSET] = CMD_STAT_SUCCESS;
-            num += 2u;
 
-            Spi_GenericTransaction(request[PROTOCOL_SPI_CONTROL_OFFSET], request[PROTOCOL_SPI_LENGTH_OFFSET],
-                                   &request[PROTOCOL_SPI_DATA_OFFSET], &response[PROTOCOL_RESP_DATA_OFFSET],
-                                   request[PROTOCOL_SPI_SS_OFFSET]);
-            num += request[PROTOCOL_SPI_LENGTH_OFFSET];
-            num += ((4UL + (uint32_t)request[PROTOCOL_SPI_LENGTH_OFFSET]) << 16);
+            if ((GetKitSupportedSpiSs() & request[PROTOCOL_SPI_SS_OFFSET]) != request[PROTOCOL_SPI_SS_OFFSET])
+            {
+                response[PROTOCOL_CMD_OFFSET] = CMD_STAT_FAIL_INV_PAR;
+                num++;
+            }
+            else
+            {
+                response[PROTOCOL_STATUS_OFFSET] = CMD_STAT_SUCCESS;
+                num += 2u;
+
+                Spi_GenericTransaction(request[PROTOCOL_SPI_CONTROL_OFFSET], request[PROTOCOL_SPI_LENGTH_OFFSET],
+                                       &request[PROTOCOL_SPI_DATA_OFFSET], &response[PROTOCOL_RESP_DATA_OFFSET],
+                                       request[PROTOCOL_SPI_SS_OFFSET]);
+                num += request[PROTOCOL_SPI_LENGTH_OFFSET];
+                num += ((4UL + (uint32_t)request[PROTOCOL_SPI_LENGTH_OFFSET]) << 16);
+            }
         }
         else
         {
@@ -1339,6 +1369,10 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
 
     case ID_DAP_Vendor16:
         /* Command 0x90 */
+        num = DAP_ProcessVendorCommand(request, response);
+        break;
+    case ID_DAP_Vendor19:
+        /* Command 0x93 */
         num = DAP_ProcessVendorCommand(request, response);
         break;
 
@@ -1422,7 +1456,9 @@ void Bridge_PrepareUartInterface(void)
 *******************************************************************************/
 static void UartRtsnSetMode(uint8_t comPort, uint8_t mode)
 {
-    if (KitHasSpecialRts() && ((comPort == 0u) || ((comPort == 1u) && KitHasSecondaryUart())))
+    bool cachedPrimaryFlowCtrl = KitPrimaryUartHwControl();
+    bool cachedSecondaryFlowCtrl = KitSecondaryUartHwControl();
+    if (KitHasSpecialRts() && (((comPort == 0u) && cachedPrimaryFlowCtrl) || ((comPort == 1u) && cachedSecondaryFlowCtrl && KitHasSecondaryUart())))
     {
         uart_bridge_t const *port = &uart[comPort];
         switch(mode)
@@ -1459,7 +1495,10 @@ static void UartRtsnSetMode(uint8_t comPort, uint8_t mode)
 static void UsbUartRtsEventHandler(uint8_t comPort, uint8_t eventType, bool asserted)
 {
     static uint8_t usbUartRtsFlag[2u] = { RTS_FLAG_NOT_SET, RTS_FLAG_NOT_SET };
-    if ((comPort == 0u) || ((comPort == 1u) && KitHasSecondaryUart()))
+    bool cachedPrimaryFlowCtrl = KitPrimaryUartHwControl();
+    bool cachedSecondaryFlowCtrl = KitSecondaryUartHwControl();
+    
+    if (((comPort == 0u) && cachedPrimaryFlowCtrl) || ((comPort == 1u) && cachedSecondaryFlowCtrl && KitHasSecondaryUart()))
     {
         uint8_t prevRtsFlags = usbUartRtsFlag[comPort];
         uint8_t newRtsFlags;
@@ -1637,7 +1676,9 @@ static void UsbUartCheckLine(void)
     CyUsbIntEnable(intrMask);
     if((lineChangedState & USBFS_LINE_CONTROL_CHANGED) != 0u)
     {
-        if (KitHasSpecialRts())
+        bool cachedPrimaryFlowCtrl = KitPrimaryUartHwControl();
+        bool cachedSecondaryFlowCtrl = KitSecondaryUartHwControl();
+        if (KitHasSpecialRts() && (cachedPrimaryFlowCtrl || cachedSecondaryFlowCtrl))
         {
             /* only for Kit with HWID 0x0C */
             uint16_t lineControl = USBFS_GetLineControl();
@@ -1883,10 +1924,20 @@ void UsbUartStart(void)
 *******************************************************************************/
 static void UsbUartEventPwrOnOrReset(bool asserted)
 {
+    bool cachedPrimaryFlowCtrl = KitPrimaryUartHwControl();
+    bool cachedSecondaryFlowCtrl = KitSecondaryUartHwControl();
     if (KitHasSpecialRts())
     {
-        UsbUartRtsEventHandler(0u, RTS_FLAG_PWRON_OR_RESET, asserted);
-        UsbUartRtsEventHandler(1u, RTS_FLAG_PWRON_OR_RESET, asserted);
+        if (cachedPrimaryFlowCtrl)
+        {
+            UsbUartRtsEventHandler(0u, RTS_FLAG_PWRON_OR_RESET, asserted);
+        }
+        
+        if (cachedSecondaryFlowCtrl)
+        {
+            UsbUartRtsEventHandler(1u, RTS_FLAG_PWRON_OR_RESET, asserted);
+        }
+        
     }
 }
 
@@ -1920,6 +1971,51 @@ void isr_RTSDelay_Interrupt_InterruptCallback(void)
 }
 
 /*******************************************************************************
+* DisableFlowControl
+********************************************************************************
+* Disables UART Hardware flow control for requested UART
+*******************************************************************************/
+static void DisableFlowControl(uint8_t comPort)
+{
+    if ((comPort == 0u) || ((comPort == 1u) && KitHasSecondaryUart()))
+    {
+        uart_bridge_t const *port = &uart[comPort];
+        port->UartHwControlFlow(0u);
+
+        CyPins_SetPinDriveMode(port->uartCtsPinPc, CY_PINS_DM_ALG_HIZ);
+        CyPins_SetPinDriveMode(port->uartRtsPinPc, CY_PINS_DM_ALG_HIZ);
+        *((reg8 *)port->uartRtsPinByp) &= ~((uint8_t)port->uartRtsPinMask);
+    }
+}
+
+
+/*******************************************************************************
+* EnableFlowControl
+********************************************************************************
+* Enables UART Hardware flow control for requested UART
+*******************************************************************************/
+static void EnableFlowControl(uint8_t comPort)
+{
+    if ((comPort == 0u) || ((comPort == 1u) && KitHasSecondaryUart()))
+    {
+        uart_bridge_t const *port = &uart[comPort];
+        port->UartHwControlFlow(1u);
+
+        if (KitHasSpecialRts())
+        {
+            /* This means that hardware flow control is also present. */
+            UartRtsnSetMode(comPort, UART_RTS_N_FORCE_UP_MODE);
+            CyDelay(RTS_DELAY_IN_HIGH_MS);
+            UartRtsnSetMode(comPort, UART_RTS_N_NORMAL_MODE);
+        }
+        else
+        {
+            UartRtsnSetMode(comPort, UART_RTS_N_NORMAL_MODE);
+        }
+    }
+}
+
+/*******************************************************************************
 * UartCtsRtsPinInit
 ********************************************************************************
 * If the Kit does not have CTS/RTS lines, set the CTS pin to Resistive Pull
@@ -1932,40 +2028,30 @@ void isr_RTSDelay_Interrupt_InterruptCallback(void)
 *******************************************************************************/
 void UartCtsRtsPinInit(void)
 {
-    /* CTS pin init */
-    if(!KitHasUartHwFlowControl())
+    bool cachedPrimaryFlowCtrl = KitPrimaryUartHwControl();
+    bool cachedSecondaryFlowCtrl = KitSecondaryUartHwControl();
+    
+    if (cachedPrimaryFlowCtrl)
     {
-        /* Set CTS logic to Internal Active-Low*/
-        Control_Flow_En_Write(0u);
-
-        CyPins_ClearPin(UART_CTS_0);
-        CyPins_SetPinDriveMode(UART_CTS_0, UART_CTS_DM_RES_DWN);
-        if (KitHasSecondaryUart())
-        {
-            CyPins_ClearPin(UART_CTS_2_0);
-            CyPins_SetPinDriveMode(UART_CTS_2_0, UART_CTS_2_DM_RES_DWN);
-        }
+        EnableFlowControl(0);
     }
     else
     {
-        /* Set CTS logic to External */
-        Control_Flow_En_Write(1u);
+        DisableFlowControl(0);
     }
-    /* RTS pin init */
-    if (KitHasSpecialRts())
+    
+    if (cachedSecondaryFlowCtrl)
     {
-        /* This means that hardware flow control is also present. */
-        UartRtsnSetMode(0u, UART_RTS_N_FORCE_UP_MODE);
-        UartRtsnSetMode(1u, UART_RTS_N_FORCE_UP_MODE);
-        /* KITPROG3-90: special behavior of RTS signal on power up
-        * to be able powering up CYW20819 without autobaud mode.
-        * by default bypass is disabled and drive mode is DM_RES_UP
-        */
-        CyDelay(RTS_DELAY_IN_HIGH_MS);
-        /* enable bypass and going to DM_STRONG */
-        UartRtsnSetMode(0u, UART_RTS_N_NORMAL_MODE);
-        UartRtsnSetMode(1u, UART_RTS_N_NORMAL_MODE);
-
+        EnableFlowControl(1);
+    }
+    else
+    {
+        DisableFlowControl(1);
+    }
+    
+    
+    if (KitHasSpecialRts() && (cachedPrimaryFlowCtrl || cachedSecondaryFlowCtrl))
+    {
         /* setup timer for RTS delay for target hw reset*/
         Timer_RTS_Delay_WritePeriod(RTS_DELAY_IN_HIGH_TICK);
         (void)Timer_RTS_Delay_ReadStatusRegister();
@@ -1974,28 +2060,6 @@ void UartCtsRtsPinInit(void)
         /* activate isr handler for SWDXRES pin */
         (void)SWDXRES_ClearInterrupt();
         isr_SWDXRES_Start();
-    }
-    else
-    {
-        if (KitHasUartHwFlowControl())
-        {
-            /* enable bypass and going to DM_STRONG */
-            UartRtsnSetMode(0u, UART_RTS_N_NORMAL_MODE);
-            UartRtsnSetMode(1u, UART_RTS_N_NORMAL_MODE);
-        }
-        else
-        {
-            /* disable bypass and going to DM_RES_DWN */
-            CyPins_ClearPin(UART_RTS_0);
-            CyPins_SetPinDriveMode(UART_RTS_0, UART_RTS_DM_RES_DWN);
-            *((reg8 *)UART_RTS__BYP) &= ~((uint8_t)UART_RTS_MASK);
-            if (KitHasSecondaryUart())
-            {
-                CyPins_ClearPin(UART_RTS_2_0);
-                CyPins_SetPinDriveMode(UART_RTS_2_0, UART_RTS_2_DM_RES_DWN);
-                *((reg8 *)UART_RTS_2__BYP) &= ~((uint8_t)UART_RTS_2_MASK);
-            }
-        }
     }
 }
 
@@ -2008,8 +2072,18 @@ void UsbUartEventSwdConnect(bool asserted)
 {
     if (KitHasSpecialRts())
     {
-        UsbUartRtsEventHandler(0u, RTS_FLAG_SWD_ACTIVE, asserted);
-        UsbUartRtsEventHandler(1u, RTS_FLAG_SWD_ACTIVE, asserted);
+        bool cachedPrimaryFlowCtrl = KitPrimaryUartHwControl();
+        bool cachedSecondaryFlowCtrl = KitSecondaryUartHwControl();
+        
+        if (cachedPrimaryFlowCtrl)
+        {
+            UsbUartRtsEventHandler(0u, RTS_FLAG_SWD_ACTIVE, asserted);
+        }
+        
+        if (cachedSecondaryFlowCtrl)
+        {
+            UsbUartRtsEventHandler(1u, RTS_FLAG_SWD_ACTIVE, asserted);
+        }
     }
 }
 
@@ -2046,11 +2120,12 @@ static void Gpio_DsiBypassDisable(void)
 *******************************************************************************/
 void Bridge_PrepareGpioInterface(void)
 {
-    /* Configure pins 3[5] and 3[6]pins */
+    /* Configure pins 3[5] and 3[6] pins */
     /* Bypass shared pin from control reg */
     Gpio_DsiBypassDisable();
     GPIO_SetDriveMode(GPIO_DM_ALG_HIZ);
 }
+
 
 /*******************************************************************************
 * UpdateGpioState
@@ -2072,6 +2147,33 @@ static void UpdateGpioState(gpio_pin_t volatile * gpioPin)
         gpioPin->change = TRANSITION_LOW_HIGH;
     }
 }
+
+
+/*******************************************************************************
+* GetGpioPin
+********************************************************************************
+* Returns pointer to GPIO pin structure
+* @param[in] pin The requested GPIO pin or null pointer if no pin was found.
+*******************************************************************************/
+static volatile gpio_pin_t * GetGpioPin(uint8_t pin)
+{
+    volatile gpio_pin_t * gpioPin = ((void *) 0);
+    
+    /* Check if the device has 0x0F HWID, which supports only one GPIO pin */
+    const volatile gpio_hwid_t *hwidGpio = (((GetKitSupportedGpioPins() & (PIN_3_5_SUPPORT_MASK | PIN_3_6_SUPPORT_MASK)) == 
+                                (PIN_3_5_SUPPORT_MASK | PIN_3_6_SUPPORT_MASK)) ? &hwidTwoGpio : &hwidOneGpio);
+    uint8_t numOfGpioPins = hwidGpio->numOfPins;
+
+    for (uint8_t pinItem = 0u; pinItem < numOfGpioPins; pinItem++)
+    {
+        if (pin == hwidGpio->pins[pinItem]->pin)
+        {
+            gpioPin = hwidGpio->pins[pinItem];
+        }
+    }
+    return gpioPin;
+}
+
 /******************************************************************************
 *  Bridge_GpioSetMode
 ***************************************************************************//**
@@ -2123,11 +2225,9 @@ uint32_t Bridge_GpioSetMode(const uint8_t * request, uint8_t *response)
             modeIsValid = true;
         }
     }
-    const volatile gpio_pin_t *curPin = ((pin == gpioState[0].pin) ? &gpioState[0] :
-                                ((pin == gpioState[1].pin) ? &gpioState[1] :
-                                (void *)0));
-    bool valid = (curPin != (void *)0) ? true: false;
-    if (valid && modeIsValid)
+    const volatile gpio_pin_t *curPin = GetGpioPin(pin);
+
+    if ((curPin != (void *) 0) && modeIsValid)
     {
         CyPins_SetPinDriveMode((reg8 *)curPin->pinReg, desiredMode);
         uint8_t curMode = CyPins_ReadPinDriveMode((reg8 *)curPin->pinReg);
@@ -2161,12 +2261,9 @@ uint32_t Bridge_GpioSetState(const uint8_t * request, uint8_t *response)
     uint8_t pin = request[GPIO_REQUEST_PIN];
     uint8_t state = request[GPIO_REQUEST_STATE_MODE];
 
-    gpio_pin_t volatile *curPin = ((pin == gpioState[0].pin) ? &gpioState[0] :
-                            ((pin == gpioState[1].pin) ? &gpioState[1] :
-                            (void *)0));
-    bool valid = (curPin != (void *)0) ? true : false;
+    volatile gpio_pin_t *curPin = GetGpioPin(pin);
 
-    if (valid)
+    if (curPin != (void *) 0)
     {
         if (CyPins_ReadPinDriveMode((reg8 *)curPin->pinReg) == PIN_DM_DIG_HIZ)
         {
@@ -2219,12 +2316,9 @@ uint32_t Bridge_GpioReadState(const uint8_t * request, uint8_t *response)
     /* Get pin number from request */
     uint8_t pin = request[GPIO_REQUEST_PIN];
 
-    const volatile gpio_pin_t *curPin = ((pin == gpioState[0].pin) ? &gpioState[0] :
-                            ((pin == gpioState[1].pin) ? &gpioState[1] :
-                            (void *)0));
-    bool valid = (curPin != (void *)0) ? true : false;
+    const volatile gpio_pin_t *curPin = GetGpioPin(pin);
 
-    if (valid)
+    if ((curPin != (void *) 0))
     {
         response[GENERAL_RESPONSE_STATUS] = DAP_OK;
         response[GENERAL_RESPONSE_RESULT] = (CyPins_ReadPin((reg8 *)curPin->pinReg) != 0u) ? 1u : 0u;
@@ -2258,11 +2352,9 @@ uint32_t Bridge_GpioStateChanged(const uint8_t * request, uint8_t *response)
     /* Get pin number from request */
     uint8_t pin = request[GPIO_REQUEST_PIN];
 
-    gpio_pin_t volatile *curPin = ((pin == gpioState[0].pin) ? &gpioState[0] :
-                            ((pin == gpioState[1].pin) ? &gpioState[1] :
-                            (void *)0));
-    bool valid = (curPin != (void *)0) ? true : false;
-    if (valid)
+    volatile gpio_pin_t *curPin = GetGpioPin(pin);
+
+    if (curPin != (void *) 0)
     {
         UpdateGpioState(curPin);
         uint8_t stateChange = curPin->change;
@@ -2283,6 +2375,91 @@ uint32_t Bridge_GpioStateChanged(const uint8_t * request, uint8_t *response)
 }
 
 
+/******************************************************************************
+*  GetSetHwContol
+***************************************************************************//**
+* Combined command for setting and getting UART HW flow control
+* @param[in] request The pointer to the request string.
+*
+* @param[out] response The pointer to the memory that will be used for storing
+*   the response for the last packet.
+*
+* returns (num of bytes in request << 16) | (num of bytes in response)
+*******************************************************************************/
+uint32_t GetSetHwContol(const uint8_t *request, uint8_t *response)
+{
+    uint32_t retVal = 0u;
+    uint8_t setGet = request[CONFIG_UART_REQUEST_COMMAND];
+    uint8_t uartPort = request[CONFIG_UART_REQUEST_PORT];
+    uint8_t uartMode = request[CONFIG_UART_REQUEST_MODE];
+    bool parametersAreValid = false;
+    
+    /* Check if parameters are valid */
+    parametersAreValid = (((uartPort == PROTOCOL_PRIMARY_UART) || (KitHasSecondaryUart() && (uartPort == PROTOCOL_SECONDARY_UART))) && 
+    ((setGet != PROTOCOL_READ_UART_FLOW_CONTROL) ? ((uartMode == PROTOCOL_SET_NO_FLOW_CONTROL) ||
+    (uartMode == PROTOCOL_SET_HW_FLOW_CONTROL)) : true));
+    
+    if (!parametersAreValid)
+    {
+        response[GENERAL_RESPONSE_STATUS] = CMD_STAT_FAIL_INV_PAR;
+        retVal += (2UL << 16) | 2UL;
+    }
+    else
+    {
+        /* Read the current value of the UART HW Contol flow */
+        if (setGet == PROTOCOL_READ_UART_FLOW_CONTROL)
+        {
+            if (uartPort == PROTOCOL_PRIMARY_UART)
+            {
+                bool cachedPrimaryFlowCtrl = KitPrimaryUartHwControl();
+                response[GENERAL_RESPONSE_RESULT] = (cachedPrimaryFlowCtrl) ? PROTOCOL_SET_HW_FLOW_CONTROL 
+                : PROTOCOL_SET_NO_FLOW_CONTROL;
+            }
+            else
+            {
+                bool cachedSecondaryFlowCtrl = KitSecondaryUartHwControl();
+                response[GENERAL_RESPONSE_RESULT] = (cachedSecondaryFlowCtrl) ? PROTOCOL_SET_HW_FLOW_CONTROL 
+                : PROTOCOL_SET_NO_FLOW_CONTROL;
+            }
+            
+            response[GENERAL_RESPONSE_STATUS] = CMD_STAT_SUCCESS;
+            retVal += (2UL << 16) | 3UL;
+        }
+        else
+        {
+            if (uartPort == PROTOCOL_PRIMARY_UART)
+            {
+                if (CySetTemp() == CYRET_SUCCESS)
+                {
+                    (void)EEPROM_ModeStorage_ByteWrite((uartMode == PROTOCOL_SET_NO_FLOW_CONTROL) ?
+                    UART_NO_FLOW_CONTROL : UART_HW_FLOW_CONTROL , 0u, PRI_UART_FLOW_CTRL_BYTE);
+                    bool cachedPrimaryFlowCtrl = KitPrimaryUartHwControl();
+                    response[GENERAL_RESPONSE_RESULT] = (cachedPrimaryFlowCtrl) ? PROTOCOL_SET_HW_FLOW_CONTROL 
+                    :PROTOCOL_SET_NO_FLOW_CONTROL;
+                }
+            }
+            else
+            {
+                if (KitHasSecondaryUart())
+                {
+                    if (CySetTemp() == CYRET_SUCCESS)
+                    {
+                        (void)EEPROM_ModeStorage_ByteWrite((uartMode == PROTOCOL_SET_NO_FLOW_CONTROL) 
+                        ? UART_NO_FLOW_CONTROL : UART_HW_FLOW_CONTROL , 0u, SEC_UART_FLOW_CTRL_BYTE);
+                        bool cachedSecondaryFlowCtrl = KitSecondaryUartHwControl();
+                        response[GENERAL_RESPONSE_RESULT] = (cachedSecondaryFlowCtrl) ? PROTOCOL_SET_HW_FLOW_CONTROL 
+                    :PROTOCOL_SET_NO_FLOW_CONTROL;
+                    }
+                }
+            }
+            response[GENERAL_RESPONSE_STATUS] = CMD_STAT_SUCCESS;
+            retVal += (3UL << 16) | 3UL;
+        }
+    }
+    return retVal;
+}
+
+
 /*******************************************************************************
 * GPIO_isr_Interrupt_InterruptCallback
 ********************************************************************************
@@ -2291,11 +2468,13 @@ uint32_t Bridge_GpioStateChanged(const uint8_t * request, uint8_t *response)
 void GPIO_isr_Interrupt_InterruptCallback(void)
 {
     gpioChanged = true;
+
     /* Clear interrupt source */
     (void)GPIO_ClearInterrupt();
+
     /* Update current state of GPIO pins */
-    gpioState[0].currentState = (CyPins_ReadPin((reg8 *)gpioState[0].pinReg) != 0u) ? 1u : 0u;
-    gpioState[1].currentState = (CyPins_ReadPin((reg8 *)gpioState[1].pinReg) != 0u) ? 1u : 0u;
+    p35GpioPin.currentState = (CyPins_ReadPin((reg8 *)p35GpioPin.pinReg) != 0u) ? 1u : 0u;
+    p36GpioPin.currentState = (CyPins_ReadPin((reg8 *)p36GpioPin.pinReg) != 0u) ? 1u : 0u;
 }
 
 /* [] END OF FILE */

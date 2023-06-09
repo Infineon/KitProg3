@@ -4,7 +4,7 @@
 * @brief
 *  This file provides the source code to handle the power control.
 *
-* @version KitProg3 v2.40
+* @version KitProg3 v2.50
 */
 /*
 * Related Documents:

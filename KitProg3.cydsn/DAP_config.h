@@ -298,7 +298,7 @@ __STATIC_INLINE void PORT_OFF (void) {
     SWD_SET_SDA_IN;
     SWD_SET_XRES_IN;
 
-    if (KitIsMiniProg())
+    if (KitSuportsJtag())
     {
         JTAG_SET_TDI_IN;
         JTAG_SET_TDO_IN;
@@ -544,7 +544,7 @@ __STATIC_INLINE void DAP_SETUP (void) {
     SWD_SET_SCK_HI;
     SWD_SET_XRES_HI;
 
-    if (KitIsMiniProg())
+    if (KitSuportsJtag())
     {
         /* setup TDI & TDO pins for MiniProg */
         JTAG_SET_TDI_IN;

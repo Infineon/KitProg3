@@ -5,7 +5,7 @@
 *   This file contains the function prototypes, macros and constants used
 *    in mutex.c file.
 *
-* @version KitProg3 v2.40
+* @version KitProg3 v2.50
 */
 /*
 * Related Documents:

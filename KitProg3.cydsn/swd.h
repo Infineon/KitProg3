@@ -5,7 +5,7 @@
 *  This file contains the function prototypes and constants used in
 *  the swd.c.
 *
-* @version KitProg3 v2.40
+* @version KitProg3 v2.50
 */
 /*
 * Related Documents:

@@ -5,7 +5,7 @@
 *   This file contains the function prototypes, macros and constants used
 *    in bridgesInterface.c file.
 *
-* @version KitProg3 v2.40
+* @version KitProg3 v2.50
 */
 /*
 * Related Documents:
@@ -15,7 +15,7 @@
 *
 *
 ******************************************************************************
-* (c) (2018-2021), Cypress Semiconductor Corporation (an Infineon company)
+* (c) (2018-2023), Cypress Semiconductor Corporation (an Infineon company)
 * or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
@@ -106,8 +106,6 @@
 #define RESTART_SUCCESS                 (0x01u)
 #define TIMEOUT                         (0x32u)
 
-#define CONTINUE                        (0x00u)
-#define EXIT                            (0x01u)
 
 #define CMD_STAT_SUCCESS                (0x00u)
 #define CMD_STAT_WAIT                   (0x01u)
@@ -190,6 +188,12 @@
 #define PROTOCOL_CUSTOM_SEQ_OFSET       (0x04u)
 #define PROTOCOL_ACQ_CMD_STAT           (0x01u)
 #define PROTOCOL_ACQ_RES_OFFSET         (0x02u)
+    
+#define PROTOCOL_READ_UART_FLOW_CONTROL (0x00u)
+#define PROTOCOL_PRIMARY_UART           (0x00u)
+#define PROTOCOL_SECONDARY_UART         (0x01u)
+#define PROTOCOL_SET_NO_FLOW_CONTROL    (0x00u)
+#define PROTOCOL_SET_HW_FLOW_CONTROL    (0x01u)
 
 #define SPI_DELAY_AFTER_SS_SET          (50u)
 
@@ -264,6 +268,7 @@ typedef struct {
     uint16_t (*UartGetTxBufferSize)(void);
     void (*UartPutArray)(const uint8 string[], uint16 byteCount);
     uint32_t uartRtsPinPc;
+    uint32_t uartCtsPinPc;
     uint32_t uartRtsPinByp;
     void (*UartClockStop)(void);
     void (*UartClockStart)(void);
@@ -274,16 +279,23 @@ typedef struct {
     void (*UartStart)(void);
     void (*UartStop)(void);
     void (**UartLed)(uint8_t value);
+    void (*UartHwControlFlow)(uint8_t enable);
 } uart_bridge_t;
 
 /* Structure for GPIO pin*/
 typedef struct {
-    volatile uint8_t previousState;
-    volatile uint8_t currentState;
-    uint8_t change;
-    uint8_t pin;
-    uint32_t pinReg;
+    volatile uint8_t previousState;     /* Describes previous state set on thepin */
+    volatile uint8_t currentState;      /* Describes current state set on the pin */
+    uint8_t change;                     /* Describes whether change of the pin state has occured */
+    uint8_t pin;                        /* 0xXY, X - the port number and Y - the pin number in decimal */
+    uint32_t pinReg;                    /* Points to register that cofigures the pin */
 } gpio_pin_t;
+
+/* Structure for device GPIO pins */
+typedef struct {
+  uint8_t numOfPins;                     /* Quantity of pins supported on the devices with given HWID */
+  volatile gpio_pin_t *pins [2];         /* Array of pointers to the GPIO pins */
+} gpio_hwid_t;
 
 /* Max possible rate with IMO clock */
 #define MAX_IMO_RATE              (3000000u)

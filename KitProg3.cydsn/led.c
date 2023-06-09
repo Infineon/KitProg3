@@ -5,7 +5,7 @@
 *   This file provides the source code to handle LEDs used to display device
 *   state.
 *
-* @version KitProg3 v2.40
+* @version KitProg3 v2.50
 */
 /*
 * Related Documents:
@@ -15,7 +15,7 @@
 *
 *
 ******************************************************************************
-* (c) (2018-2021), Cypress Semiconductor Corporation (an Infineon company)
+* (c) (2018-2022), Cypress Semiconductor Corporation (an Infineon company)
 * or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
@@ -88,10 +88,11 @@ void Led_Init(void)
     ShiftReg_LED_Amber_Start();
     if (!KitHasThreeLeds())
     {
-        if (!KitHasUartIndicator()) {
-        /* Set unused Red and Green LEDs pins to Hi-Z to save power */
-        CyPins_SetPinDriveMode(LED_Red_0, PIN_DM_ALG_HIZ);
-        CyPins_SetPinDriveMode(LED_Green_0, PIN_DM_ALG_HIZ);
+        if (!KitHasUartIndicator()) 
+        {
+            /* Set unused Red and Green LEDs pins to Hi-Z to save power */
+            CyPins_SetPinDriveMode(LED_Red_0, PIN_DM_ALG_HIZ);
+            CyPins_SetPinDriveMode(LED_Green_0, PIN_DM_ALG_HIZ);
         }
         else
         {

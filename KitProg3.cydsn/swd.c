@@ -4,7 +4,7 @@
 * @brief
 *  This file provides the source code to handle SWD programming.
 *
-* @version KitProg3 v2.40
+* @version KitProg3 v2.50
 */
 /*
 * Related Documents:
@@ -14,7 +14,7 @@
 *
 *
 ******************************************************************************
-* (c) (2018-2021), Cypress Semiconductor Corporation (an Infineon company)
+* (c) (2018-2022), Cypress Semiconductor Corporation (an Infineon company)
 * or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
@@ -2463,7 +2463,7 @@ void Swd_SetApSelect(const uint8_t ap)
 /******************************************************************************
 *  Swd_Acquire
 ***************************************************************************//**
-* Performs Acquire procedure .
+* Performs Acquire procedure.
 *
 * @param[in]  dut          Target chip to acquire.
 * @param[in]  acquireMode  Acquiring mode (0 - Reset, 1 - Power Cycle)

@@ -5,7 +5,7 @@
 *  This file contains the function prototypes and constants used in
 *  the version.c.
 *
-* @version KitProg3 v2.40
+* @version KitProg3 v2.50
 */
 /*
 * Related Documents:
@@ -15,7 +15,7 @@
 *
 *
 ******************************************************************************
-* (c) (2018-2021), Cypress Semiconductor Corporation (an Infineon company)
+* (c) (2018-2023), Cypress Semiconductor Corporation (an Infineon company)
 * or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
@@ -63,26 +63,45 @@
 #define V3_3_SUPPORT_MASK                (0x04u)
 #define V5_0_SUPPORT_MASK                (0x08u)
 
+#define NO_PROTOCOL_SUPPORT_MASK         (0x00u)
+#define JTAG_PROTOCOL_SUPPORT_MASK       (0x01u)
+#define SWD_PROTOCOL_SUPPORT_MASK        (0x02u)
+
+#define NO_SS_SUPPORT_MASK               (0x00u)
+#define SPI_SS0_SUPPORT_MASK             (0x01u)
+#define SPI_SS1_SUPPORT_MASK             (0x02u)
+#define SPI_SS2_SUPPORT_MASK             (0x04u)
+#define SPI_SS_SUPPORT_MASK              (0x07u)
+ 
+#define NO_GPIO_PINS_SUPPORT_MASK        (0x00u)
+#define PIN_3_5_SUPPORT_MASK             (0x10u)
+#define PIN_3_6_SUPPORT_MASK             (0x20u)
+
+
 /*****************************************************************************
 * Data Structure Definition
 *****************************************************************************/
 
 typedef struct
 {
-    bool kitHasVoltMeasure;        /**< Kit has Voltage Measurement supported */
-    bool kitHasPowerControl;       /**< Kit has ability to turn on and off power for target board */
-    bool kitHasThreeLeds;          /**< Kit has three lEDs, assuming in false case kit has single LED */
-    bool kitHasTwoButtons;         /**< Kit has two buttons, assuming in false case kit has single button */
-    bool kitHasSecondaryUart;      /**< Kit has second UART */
-    bool kitHasUartHwFlowControl;  /**< Kit supports hardware flow control for UART */
-    bool kitHasSpecialRts;         /**< Kit has 200ms RTS stretch on high when turned on */
-    bool kitHasI2cBridge;          /**< Kit supports I2C bridging */
-    bool kitHasSpiBridge;          /**< Kit supports SPI bridging */
-    bool kitHasGpioBridge;         /**< Kit supports GPIO bridging */
-    bool kitIsMiniProg;            /**< Kit is MiniProg, a standalone programmer */
-    bool kitHasPowerCycleProg;  /**< Kit can be programmed during power cycle */
-    bool kitHasUartIndicator;
-    uint8_t kitSupportedVoltages;  /**< Bitmask of supported target voltages */
+    bool kitHasVoltMeasure;             /**< Kit has Voltage Measurement supported */
+    bool kitHasPowerControl;            /**< Kit has ability to turn on and off power for target board */
+    bool kitHasThreeLeds;               /**< Kit has three lEDs, assuming in false case kit has single LED */
+    bool kitHasTwoButtons;              /**< Kit has two buttons, assuming in false case kit has single button */
+    bool kitHasSecondaryUart;           /**< Kit has second UART */
+    bool kitHasUartHwFlowControl;       /**< Kit supports hardware flow control for UART */
+    bool kitHasSpecialRts;              /**< Kit has 200ms RTS stretch on high when turned on */
+    bool kitHasI2cBridge;               /**< Kit supports I2C bridging */
+    bool kitHasSpiBridge;               /**< Kit supports SPI bridging */
+    bool kitHasGpioBridge;              /**< Kit supports GPIO bridging */
+    bool kitIsMiniProg;                 /**< Kit is MiniProg, a standalone programmer */
+    bool kitHasPowerCycleProg;          /**< Kit can be programmed during power cycle */
+    bool kitHasUartIndicator;           /**< Kit supports LED UART traffic indication */
+    uint8_t kitProtocolSupport;         /**< Bitmask of supported debugging/programming protocols */
+    uint8_t kitSupportedSpiSlaveSelect; /**< Bitmask of supported SPI SS pins */
+    uint8_t kitSupportedGpioPins;       /**< Bitmask of supported GPIO pins */
+    uint8_t kitSupportedVoltages;       /**< Bitmask of supported target voltages */
+    bool kitHasHciPeripheralUarts;      /**< Kit supports HCI and Peripheral UARTs */
 } kitprog_properties_t;
 
 /*****************************************************************************
@@ -142,6 +161,7 @@ bool KitHasVoltageMeas(void);
 ******************************************************************************/
 bool KitHasPowerControl(void);
 
+
 /******************************************************************************
 *  MarkRegulatorFaulty
 ***************************************************************************//**
@@ -149,6 +169,7 @@ bool KitHasPowerControl(void);
 *
 ******************************************************************************/
 void MarkPowerControlFaulty(void);
+
 
 /******************************************************************************
 *  KitHasThreeLeds
@@ -160,6 +181,7 @@ void MarkPowerControlFaulty(void);
 *
 ******************************************************************************/
 bool KitHasThreeLeds(void);
+
 
 /******************************************************************************
 *  KitHasTwoButtons
@@ -194,6 +216,7 @@ bool KitHasSecondaryUart(void);
 ******************************************************************************/
 bool KitHasUartHwFlowControl(void);
 
+
 /******************************************************************************
 *  KitHasSpecialRtsPowerup
 ***************************************************************************//**
@@ -203,6 +226,7 @@ bool KitHasUartHwFlowControl(void);
 *
 ******************************************************************************/
 bool KitHasSpecialRts(void);
+
 
 /******************************************************************************
 *  KitHasI2cBridge
@@ -270,6 +294,86 @@ bool KitHasUartIndicator(void);
 
 
 /******************************************************************************
+*  GetKitSupportedSpiSs
+***************************************************************************//**
+* Get bitmask of supported SPI SS pins.
+*
+* @return  Bitmask with supported SPI SS pins
+*          SPI_SS0_SUPPORT_MASK, SPI_SS1_SUPPORT_MASK,
+*          SPI_SS2_SUPPORT_MASK
+*
+******************************************************************************/
+uint8_t GetKitSupportedSpiSs(void);
+
+
+/******************************************************************************
+*  KitSuportsSwd
+***************************************************************************//**
+* Check if current kit supports SWD protocol
+*
+* @return  True if kit suppotrs SWD
+*
+******************************************************************************/
+bool KitSuportsSwd(void);
+
+
+/******************************************************************************
+*  GetKitSupportedGpioPins
+***************************************************************************//**
+* Get bitmask of supported GPIO pins.
+*
+* @return  Bitmask with supported GPIO pins
+*          PIN_3_5_SUPPORT_MASK, PIN_3_6_SUPPORT_MASK,
+*
+******************************************************************************/
+uint8_t GetKitSupportedGpioPins(void);
+
+
+/******************************************************************************
+*  KitSuportsJTAG
+***************************************************************************//**
+* Check if kit supports JTAG protocol.
+*
+* @return  True if kit supports JTAG.
+*
+******************************************************************************/
+bool KitSuportsJtag(void);
+
+
+/******************************************************************************
+*  KitSupportsHciPeriUart
+***************************************************************************//**
+* Check if kit supports HCI and Peripheral UARTs.
+*
+* @return if kit supports HCI and Peripheral UARTs.
+*
+******************************************************************************/
+bool KitSupportsHciPeriUart(void);
+
+
+/******************************************************************************
+*  KitPrimaryUartHwControl
+***************************************************************************//**
+* Check if current value of UART Hardware flow control for Primary UART.
+*
+* @return  True if on.
+*
+******************************************************************************/
+bool KitPrimaryUartHwControl(void);
+
+
+/******************************************************************************
+*  KitSecondaryUartHwControl
+***************************************************************************//**
+* Check if current value of UART Hardware flow control for Secondary UART.
+*
+* @return  True if on.
+*
+******************************************************************************/
+bool KitSecondaryUartHwControl(void);
+
+
+/******************************************************************************
 *  GetKitSupportedVoltages
 ***************************************************************************//**
 * Get bitmask of kit supported voltages.
@@ -332,7 +436,6 @@ uint8_t System_GetMinorVersion(void);
 *
 ******************************************************************************/
 uint16_t System_GetBuildNumber(void);
-
 
 #endif /* VERSION_H */
 

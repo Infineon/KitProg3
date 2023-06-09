@@ -5,7 +5,7 @@
 *   This file contains the function prototypes and constants used in
 *   main.c
 *
-* @version KitProg3 v2.40
+* @version KitProg3 v2.50
 */
 /*
 * Related Documents:
@@ -15,7 +15,7 @@
 *
 *
 ******************************************************************************
-* (c) (2018-2021), Cypress Semiconductor Corporation (an Infineon company)
+* (c) (2018-2023), Cypress Semiconductor Corporation (an Infineon company)
 * or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
@@ -83,14 +83,20 @@
 #define UART_IN_EP                  (0x06u)
 #define UART_OUT_EP                 (0x07u)
 
+/* KitProg3 modes */
 #define MODE_BULK                   (0x00u)
 #define MODE_HID                    (0x01u)
 #define MODE_BULK2UARTS             (0x02u)
+
+/* Corresponding with mode and HWID USBFS devices */
+#define MODE_KP3_BULK               (0x00u)
+#define MODE_KP3_HID                (0x01u)
+#define MODE_KP3_BULK2UARTS         (0x02u)
 #define MODE_MP_BULK                (0x03u)
 #define MODE_MP_HID                 (0x04u)
-
-#define MODE_MP4                    (0x02u)
-#define MODE_MP4_CMSISDAP           (0x03u)
+#define MODE_BULK2UARTS_HCI_PERI    (0x05u)
+#define MODE_BULK_HCI_PERI          (0x06u)
+#define MODE_HID_HCI_PERI           (0x07u)
 
 #define USB_WAIT_FOR_VBUS           (0x01u)
 #define USB_START_COMPONENT         (0x02u)
@@ -144,10 +150,16 @@
 * Global Variable Declaration
 *****************************************************************************/
 extern volatile uint8_t currentMode;
+extern volatile uint8_t currentFirstUartMode;
+extern volatile uint8_t currentSecondUartMode;
 extern volatile bool usbResetDetected;
 extern bool usbDapReadFlag;
 extern volatile bool gpioChanged;
 
+#define DEFAULT_UART_FLOW_CONTROL      (0x00u)
+#define UART_NO_FLOW_CONTROL           (0x01u)
+#define UART_HW_FLOW_CONTROL           (0x02u)
+    
 /*****************************************************************************
 * External Function Prototypes
 *****************************************************************************/

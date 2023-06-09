@@ -25,7 +25,7 @@
  *
  *---------------------------------------------------------------------------*/
 /*---------------------------------------------------------------------------
- * Portions Copyright 2018-2021, Cypress Semiconductor Corporation
+ * Portions Copyright 2018-2023, Cypress Semiconductor Corporation
  * (an Infineon company) or an affiliate of Cypress Semiconductor Corporation.
  * All rights reserved.
  *
@@ -130,6 +130,7 @@ enum {
 };
 
 static uint16_t customAcquireTimeout = 0u;
+
 //**************************************************************************************************
 /**
 \defgroup DAP_Vendor_Adapt_gr Adapt Vendor Commands
@@ -192,7 +193,7 @@ uint32_t DAP_ProcessVendorCommand(const uint8_t *request, uint8_t *response) {
             break;
         case ID_DAP_Vendor5:
             /* Command 0x85 */
-            if (DAP_Data.debug_port == DAP_PORT_SWD)
+            if ((DAP_Data.debug_port == DAP_PORT_SWD) && (KitSuportsSwd()))
             {
                 /* Disconnect SWD pins from DSI */
                 Swd_SetPinsDsiConnect(false);
@@ -265,6 +266,18 @@ uint32_t DAP_ProcessVendorCommand(const uint8_t *request, uint8_t *response) {
         case ID_DAP_Vendor18:
             /* Command 0x92 */
             num = ((1UL << 16) | GetUidData(request, response));
+            break;
+        case ID_DAP_Vendor19:
+            /* Command 0x93 */
+            if (KitHasUartHwFlowControl())
+            {
+                num = ((1UL << 16) | GetSetHwContol(request, response));
+            }
+            else
+            {
+                response[PROTOCOL_CMD_OFFSET] = ID_DAP_Invalid;
+                num = ID_DAP_DEF_CASE_RESP_LEN;
+            }
             break;
         default:
         {
@@ -583,16 +596,16 @@ uint32_t GetCapabilities(const uint8_t *request, uint8_t *response)
     (void) request;
     uint32_t num = 0u;
 
-    response[V16R_CMD_STATUS] = CMD_STAT_SUCCESS;
+    response[V16R_CMD_STATUS] = CMD_STAT_SUCCESS;        
     response[V16R_SUPPORTED_INTERFACES] = (KitHasI2cBridge() ? I2C_AVAILABILITY_MASK : 0x00u) |
-                             (KitHasSpiBridge() ? SPI_AVAILIBILITY_MASK : 0x00u) |
-                              DAPH_AVAILIBILITY_MASK | DAPB_AVAILIBILITY_MASK |
-                             (KitHasPowerControl() ? ON_OFF_SW_AVAILIBILITY_MASK : 0x00u) |
-                             (KitHasVoltageMeas() ? VMEAS_AVAILIBILITY_MASK : 0x00u)|
-                            (KitHasGpioBridge() ? GPIO_AVAILIBILITY_MASK : 0x00u);
+                                          (KitHasSpiBridge() ? SPI_AVAILIBILITY_MASK : 0x00u) |
+                                           DAPH_AVAILIBILITY_MASK | DAPB_AVAILIBILITY_MASK |
+                                          (KitHasPowerControl() ? ON_OFF_SW_AVAILIBILITY_MASK : 0x00u) |
+                                          (KitHasVoltageMeas() ? VMEAS_AVAILIBILITY_MASK : 0x00u)|
+                                          (KitHasGpioBridge() ? GPIO_AVAILIBILITY_MASK : 0x00u);
     response[V16R_UART_LED] = ((KitHasThreeLeds() ? THREE_LED_KIT_MASK : ONE_LED_KIT_MASK) +
-                 (KitHasSecondaryUart() ? TWO_UART_MASK : ONE_UART_MASK));
-    response[V16R_I2C_CLOCK] = I2C_SPEEDS_MASK;
+                               (KitHasSecondaryUart() ? TWO_UART_MASK : ONE_UART_MASK));
+    response[V16R_I2C_CLOCK] = (GetKitSupportedGpioPins() | I2C_SPEEDS_MASK);
     response[V16R_MIN_SPI_BYTE1] = LO8(LO16(SOURCECLK_IMO/SPI_COMP_DIVIDER/SPI_DIVIDER_MAX));
     response[V16R_MIN_SPI_BYTE2] = HI8(LO16(SOURCECLK_IMO/SPI_COMP_DIVIDER/SPI_DIVIDER_MAX));
     response[V16R_MIN_SPI_BYTE3] = LO8(HI16(SOURCECLK_IMO/SPI_COMP_DIVIDER/SPI_DIVIDER_MAX));
@@ -601,8 +614,8 @@ uint32_t GetCapabilities(const uint8_t *request, uint8_t *response)
     response[V16R_MAX_SPI_BYTE2] = HI8(LO16(SOURCECLK_IMO/SPI_COMP_DIVIDER/SPI_DIVIDER_MIN));
     response[V16R_MAX_SPI_BYTE3] = LO8(HI16(SOURCECLK_IMO/SPI_COMP_DIVIDER/SPI_DIVIDER_MIN));
     response[V16R_MAX_SPI_BYTE4] = HI8(HI16(SOURCECLK_IMO/SPI_COMP_DIVIDER/SPI_DIVIDER_MIN));
-    response[V16R_SPI_SS] = SPI_SS_LINES_MASK;
-    response[V16R_VOLTAGES] =  GetKitSupportedVoltages();
+    response[V16R_SPI_SS] = GetKitSupportedSpiSs();
+    response[V16R_VOLTAGES] = GetKitSupportedVoltages();
     num = PROB_CAP_RESP_LEN;
 
     return (num);
@@ -892,7 +905,7 @@ void WaitVendorResponse(void)
 
 
 /******************************************************************************
-*  CalculateUniqIdChacksum
+*  CalculateUniqIdChecksum
 ***************************************************************************//**
 * Calculate UID Record's checksum
 *
@@ -901,7 +914,7 @@ void WaitVendorResponse(void)
 * @return computed unique ID record checksum
 *
 ******************************************************************************/
-static uint8_t CalculateUniqIdChacksum(const unique_id_struct_t *uidRecord)
+static uint8_t CalculateUniqIdChecksum(const unique_id_struct_t *uidRecord)
 {
     uint8_t checksum = 0u;
     const uint8_t *uidAddress = (const uint8_t *)uidRecord;
@@ -936,7 +949,7 @@ uint32_t GetUidData(const uint8_t *request, uint8_t *response)
     const unique_id_struct_t *uidRecord = (unique_id_struct_t *)UNIQUE_ID_ADDRESS;
 
     /* Calculate unique id record's checksum */
-    uint8_t uidChecksum = CalculateUniqIdChacksum(uidRecord);
+    uint8_t uidChecksum = CalculateUniqIdChecksum(uidRecord);
     bool uidIsValid = ((uidRecord->signature == PSOC5_SIID) && (uidRecord->checksum == uidChecksum));
 
     response[GENERAL_RESPONSE_STATUS] = DAP_OK;
