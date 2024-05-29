@@ -5,7 +5,7 @@
 *   Provides the source code to handle the application switching
 *   for the bootloadable project.
 *
-* @version KitProg3 v2.50
+* @version KitProg3 v2.60
 */
 /*
 * Related Documents:

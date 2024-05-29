@@ -4,7 +4,7 @@
 * @brief
 *  This file provides the source code to handle version information.
 *
-* @version KitProg3 v2.50
+* @version KitProg3 v2.60
 */
 /*
 * Related Documents:
@@ -53,7 +53,7 @@
 
 
 #define VER_MAJOR                        (2u)
-#define VER_MINOR                        (50u)
+#define VER_MINOR                        (60u)
 
 /*****************************************************************************
 * Data Structure Definition

@@ -5,7 +5,7 @@
 *   This file provides the source code to handle LEDs used to display device
 *   state.
 *
-* @version KitProg3 v2.50
+* @version KitProg3 v2.60
 */
 /*
 * Related Documents:

@@ -4,7 +4,7 @@
 * @brief
 *  This file contains the function prototypes and constants for jtag communication.
 *
-* @version KitProg3 v2.50
+* @version KitProg3 v2.60
 */
 /*
 * Related Documents:

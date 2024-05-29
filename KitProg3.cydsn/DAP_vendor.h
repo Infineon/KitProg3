@@ -5,7 +5,7 @@
 *   This file contains the function prototypes and constants used in
 *   the DAP_vendor.c
 *
-* @version KitProg3 v2.50
+* @version KitProg3 v2.60
 */
 /*
 * Related Documents:

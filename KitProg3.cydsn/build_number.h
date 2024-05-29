@@ -5,7 +5,7 @@
 *   This header file is substituted by Jenkins build machine with actual
 *   build number.
 *
-* @version KitProg3 v2.50
+* @version KitProg3 v2.60
 */
 /*
 * Related Documents:

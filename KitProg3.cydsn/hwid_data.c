@@ -5,7 +5,7 @@
 *  This file contains data that encodes the capabilities of the kit based on
 *  the kit hardware identifier (HWID).
 *
-* File Version : 1.0.112
+* File Version : 1.0.119
 */
 /*
 * Related Documents:
@@ -315,10 +315,10 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasSpecialRts = true,
         .kitHasI2cBridge = true,
         .kitHasSpiBridge = false,
-        .kitHasGpioBridge = true,
+        .kitHasGpioBridge = false,
         .kitIsMiniProg = false,
         .kitHasPowerCycleProg = false,
-        .kitProtocolSupport = SWD_PROTOCOL_SUPPORT_MASK,
+        .kitProtocolSupport = JTAG_PROTOCOL_SUPPORT_MASK | SWD_PROTOCOL_SUPPORT_MASK,
         .kitSupportedSpiSlaveSelect = NO_SS_SUPPORT_MASK,
         .kitSupportedGpioPins = NO_GPIO_PINS_SUPPORT_MASK,
         .kitHasUartIndicator = false,
@@ -339,7 +339,7 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasGpioBridge = true,
         .kitIsMiniProg = false,
         .kitHasPowerCycleProg = false,
-        .kitProtocolSupport = JTAG_PROTOCOL_SUPPORT_MASK,
+        .kitProtocolSupport = NO_PROTOCOL_SUPPORT_MASK,
         .kitSupportedSpiSlaveSelect = SPI_SS0_SUPPORT_MASK,
         .kitSupportedGpioPins = PIN_3_5_SUPPORT_MASK,
         .kitHasUartIndicator = false,

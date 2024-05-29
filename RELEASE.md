@@ -1,13 +1,10 @@
-### KitProg3 v2.50.0 Release Notes
+### KitProg3 v2.60.0 Release Notes
 
-KitProg3 is our low-level communication firmware for programming and debugging. It provides communication between a programming tool (such as CYPRESS™ Programmer or PSoC™ Programmer) and a target, such as a PSoC™ 6 MCU. KitProg3 supports a variety of development kits. It is also the communication firmware found in the MiniProg4 debug probe.
+KitProg3 is our low-level communication firmware for programming and debugging. It provides communication between a programming tool (such as ModusToolbox Programmer or PSoC™ Programmer) and a target, such as a PSoC™ 6 MCU. KitProg3 supports a variety of development kits. It is also the communication firmware found in the MiniProg4 debug probe.
 Our development kits have KitProg3 firmware installed to provide the necessary communication between the host and target. As a result, when you plug the kit into your host computer, programming and debugging just work.
 
 ### New Features
 
-- Adds an ability to configure UART Hardware Flow Control. This configuration allows you to switch between "no hardware flow control" and "hardware flow control" for devices that by default support have UART Hardware Flow Control enabled
-- Provides easily distinguishable names of COM ports in Dual UART mode: for KitProg3-based devices with AIROC™ targets the names are defined as "HCI USB-UART" and "Peripheral USB-UART", for other KitPro3-based devices - "Primary USB-UART" and "Secondary USB-UART"
-- Delivers Windows 11 certified KitProg3 UART drivers
 - Bugs fixing
 
 ### Known Issues
@@ -39,4 +36,4 @@ Our development kits have KitProg3 firmware installed to provide the necessary c
 
 -   [Cypress Semiconductor, an Infineon Technologies Company](http://www.infineon.com)
 
-© Cypress Semiconductor Corporation, 2019-2023. This document is the property of Cypress Semiconductor Corporation, an Infineon Technologies company, and its affiliates ("Cypress").
+© Cypress Semiconductor Corporation, 2019-2024. This document is the property of Cypress Semiconductor Corporation, an Infineon Technologies company, and its affiliates ("Cypress").
