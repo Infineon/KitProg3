@@ -1,2 +1,4 @@
 *.c       text eol=crlf
 *.h       text eol=crlf
+KitProg3.inf binary
+KitProg3UART.inf binary
