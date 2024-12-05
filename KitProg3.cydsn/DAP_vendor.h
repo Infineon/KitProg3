@@ -143,6 +143,14 @@
 #define UART_MODE_ADDRESS                   (CYDEV_EE_BASE + PRI_UART_FLOW_CTRL_BYTE)
 #define CRC8_2S_COMP_BASE                   (0x0100u)
 
+#define UID_CY8CKIT_062S2_AI                (0x0041u)
+#define MBED_ID_CY8CKIT_062S2_AI            "1914"
+#define MBED_ID_UNSPECIFIED                 "19FF"
+#define RESP_UID_PROG_OPT_AI                (9u)
+#define UID_PROG_OPT_AI                     (0x0Bu)
+#define RESP_UID_CHECKSUM_AI                (62u)
+#define UID_CHECKSUM_AI                     (0xFAu)
+
 /* Enum for Basic DAP Vendor Response */
 enum
 {

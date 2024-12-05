@@ -14,7 +14,7 @@
 *
 *
 ******************************************************************************
-* (c) (2018-2023), Cypress Semiconductor Corporation (an Infineon company)
+* (c) (2018-2024), Cypress Semiconductor Corporation (an Infineon company)
 * or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
@@ -53,7 +53,7 @@
 
 
 #define VER_MAJOR                        (2u)
-#define VER_MINOR                        (60u)
+#define VER_MINOR                        (70u)
 
 /*****************************************************************************
 * Data Structure Definition

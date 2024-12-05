@@ -25,7 +25,7 @@
  *
  *---------------------------------------------------------------------------*/
 /*---------------------------------------------------------------------------
- * Portions Copyright 2018-2023, Cypress Semiconductor Corporation
+ * Portions Copyright 2018-2024, Cypress Semiconductor Corporation
  * (an Infineon company) or an affiliate of Cypress Semiconductor Corporation.
  * All rights reserved.
  *
@@ -960,6 +960,14 @@ uint32_t GetUidData(const uint8_t *request, uint8_t *response)
         const uint8_t *uidRecPayload = (const uint8_t *)uidRecord;
         response[GENERAL_RESPONSE_RESULT] = UNIQUE_ID_VALID;
         (void)memcpy(&response[GENERAL_RESPONSE_RESULT + 1], &uidRecPayload[sizeof(uidRecord->signature)], uidRecSize);
+        
+        // Workaround for AI device, which has no DAPLink support encoded in UID Record
+        if ((uidRecord->uid == UID_CY8CKIT_062S2_AI) && ((strncmp((const char *)uidRecord->mbedBoardId, (const char *)MBED_ID_UNSPECIFIED, sizeof(uidRecord->mbedBoardId) )) == 0 ))
+        {
+            (void)memcpy(&response[GENERAL_RESPONSE_RESULT + 1], (uint8_t *)MBED_ID_CY8CKIT_062S2_AI, sizeof(uidRecord->mbedBoardId));
+            response[RESP_UID_PROG_OPT_AI] = UID_PROG_OPT_AI;
+            response[RESP_UID_CHECKSUM_AI] = UID_CHECKSUM_AI;
+        }
         num += uidRecSize + 3UL;
     }
     else

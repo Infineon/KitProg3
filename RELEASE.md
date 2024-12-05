@@ -1,11 +1,11 @@
-### KitProg3 v2.60.0 Release Notes
+### KitProg3 v2.70.0 Release Notes
 
-KitProg3 is our low-level communication firmware for programming and debugging. It provides communication between a programming tool (such as ModusToolbox Programmer or PSoC™ Programmer) and a target, such as a PSoC™ 6 MCU. KitProg3 supports a variety of development kits. It is also the communication firmware found in the MiniProg4 debug probe.
+KitProg3 is our low-level communication firmware for programming and debugging. It provides communication between a programming tool (such as CYPRESS™ Programmer or PSoC™ Programmer) and a target, such as a PSoC™ 6 MCU. KitProg3 supports a variety of development kits. It is also the communication firmware found in the MiniProg4 debug probe.
 Our development kits have KitProg3 firmware installed to provide the necessary communication between the host and target. As a result, when you plug the kit into your host computer, programming and debugging just work.
 
 ### New Features
 
-- Bugs fixing
+- Added support of DAPLink mode on CY8CKIT-062S2-AI PSOC™ 6 AI Evaluation Kit
 
 ### Known Issues
 
