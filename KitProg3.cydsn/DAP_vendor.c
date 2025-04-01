@@ -25,7 +25,7 @@
  *
  *---------------------------------------------------------------------------*/
 /*---------------------------------------------------------------------------
- * Portions Copyright 2018-2024, Cypress Semiconductor Corporation
+ * Portions Copyright 2018-2025, Cypress Semiconductor Corporation
  * (an Infineon company) or an affiliate of Cypress Semiconductor Corporation.
  * All rights reserved.
  *
@@ -961,12 +961,24 @@ uint32_t GetUidData(const uint8_t *request, uint8_t *response)
         response[GENERAL_RESPONSE_RESULT] = UNIQUE_ID_VALID;
         (void)memcpy(&response[GENERAL_RESPONSE_RESULT + 1], &uidRecPayload[sizeof(uidRecord->signature)], uidRecSize);
         
-        // Workaround for AI device, which has no DAPLink support encoded in UID Record
+        // Workaround for several devices, which have no DAPLink support encoded in UID Record
         if ((uidRecord->uid == UID_CY8CKIT_062S2_AI) && ((strncmp((const char *)uidRecord->mbedBoardId, (const char *)MBED_ID_UNSPECIFIED, sizeof(uidRecord->mbedBoardId) )) == 0 ))
         {
             (void)memcpy(&response[GENERAL_RESPONSE_RESULT + 1], (uint8_t *)MBED_ID_CY8CKIT_062S2_AI, sizeof(uidRecord->mbedBoardId));
-            response[RESP_UID_PROG_OPT_AI] = UID_PROG_OPT_AI;
+            response[RESP_UID_PROG_OPT_AI] = UID_PROG_OPT_DAPLINK;
             response[RESP_UID_CHECKSUM_AI] = UID_CHECKSUM_AI;
+        }
+        else if ((uidRecord->uid == UID_CY8CPROTO_041TP) && ((strncmp((const char *)uidRecord->mbedBoardId, (const char *)MBED_ID_UNSPECIFIED, sizeof(uidRecord->mbedBoardId) )) == 0 ))
+        {
+            (void)memcpy(&response[GENERAL_RESPONSE_RESULT + 1], (uint8_t *)MBED_ID_CY8CPROTO_041TP, sizeof(uidRecord->mbedBoardId));
+            response[RESP_UID_PROG_OPT_AI] = UID_PROG_OPT_DAPLINK;
+            response[RESP_UID_CHECKSUM_AI] = UID_CHECKSUM_041TP;
+        }
+        else if ((uidRecord->uid == UID_CY8CPROTO_040T_MS) && ((strncmp((const char *)uidRecord->mbedBoardId, (const char *)MBED_ID_UNSPECIFIED, sizeof(uidRecord->mbedBoardId) )) == 0 ))
+        {
+            (void)memcpy(&response[GENERAL_RESPONSE_RESULT + 1], (uint8_t *)MBED_ID_CY8CPROTO_040T_MS, sizeof(uidRecord->mbedBoardId));
+            response[RESP_UID_PROG_OPT_AI] = UID_PROG_OPT_DAPLINK;
+            response[RESP_UID_CHECKSUM_AI] = UID_CHECKSUM_040T_MS;
         }
         num += uidRecSize + 3UL;
     }

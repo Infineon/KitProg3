@@ -5,7 +5,7 @@
 *  This file contains data that encodes the capabilities of the kit based on
 *  the kit hardware identifier (HWID).
 *
-* File Version : 1.0.119
+* File Version : 1.0.140
 */
 /*
 * Related Documents:
@@ -15,7 +15,7 @@
 *
 *
 ******************************************************************************
-* (c) (2018-2023), Cypress Semiconductor Corporation (an Infineon company)
+* (c) (2018-2025), Cypress Semiconductor Corporation (an Infineon company)
 * or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
@@ -339,7 +339,7 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasGpioBridge = true,
         .kitIsMiniProg = false,
         .kitHasPowerCycleProg = false,
-        .kitProtocolSupport = NO_PROTOCOL_SUPPORT_MASK,
+        .kitProtocolSupport = JTAG_PROTOCOL_SUPPORT_MASK,
         .kitSupportedSpiSlaveSelect = SPI_SS0_SUPPORT_MASK,
         .kitSupportedGpioPins = PIN_3_5_SUPPORT_MASK,
         .kitHasUartIndicator = false,

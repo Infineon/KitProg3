@@ -32,4 +32,4 @@ Note, this KitProg3 firmware source code is without the DapLink code part, which
 
 -   [Cypress Semiconductor, an Infineon Technologies Company](http://www.cypress.com)
 
-© Cypress Semiconductor Corporation, 2019-2024. This document is the property of Cypress Semiconductor Corporation, an Infineon Technologies company, and its affiliates ("Cypress").
+© Cypress Semiconductor Corporation, 2019-2025. This document is the property of Cypress Semiconductor Corporation, an Infineon Technologies company, and its affiliates ("Cypress").

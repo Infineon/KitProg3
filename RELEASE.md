@@ -1,11 +1,11 @@
-### KitProg3 v2.70.0 Release Notes
+### KitProg3 v2.80.0 Release Notes
 
 KitProg3 is our low-level communication firmware for programming and debugging. It provides communication between a programming tool (such as CYPRESS™ Programmer or PSoC™ Programmer) and a target, such as a PSoC™ 6 MCU. KitProg3 supports a variety of development kits. It is also the communication firmware found in the MiniProg4 debug probe.
 Our development kits have KitProg3 firmware installed to provide the necessary communication between the host and target. As a result, when you plug the kit into your host computer, programming and debugging just work.
 
 ### New Features
 
-- Added support of DAPLink mode on CY8CKIT-062S2-AI PSOC™ 6 AI Evaluation Kit
+- Added support of DAPLink mode on PSOC™ 4100T Plus CAPSENSE™ Prototyping Kit and CY8CPROTO-040T-MS PSOC™ 4000T Multi-Sense Prototyping Kit
 
 ### Known Issues
 
@@ -36,4 +36,4 @@ Our development kits have KitProg3 firmware installed to provide the necessary c
 
 -   [Cypress Semiconductor, an Infineon Technologies Company](http://www.infineon.com)
 
-© Cypress Semiconductor Corporation, 2019-2024. This document is the property of Cypress Semiconductor Corporation, an Infineon Technologies company, and its affiliates ("Cypress").
+© Cypress Semiconductor Corporation, 2019-2025. This document is the property of Cypress Semiconductor Corporation, an Infineon Technologies company, and its affiliates ("Cypress").

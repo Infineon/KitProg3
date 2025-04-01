@@ -15,7 +15,7 @@
 *
 *
 ******************************************************************************
-* (c) (2018-2023), Cypress Semiconductor Corporation (an Infineon company)
+* (c) (2018-2025), Cypress Semiconductor Corporation (an Infineon company)
 * or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
@@ -144,12 +144,18 @@
 #define CRC8_2S_COMP_BASE                   (0x0100u)
 
 #define UID_CY8CKIT_062S2_AI                (0x0041u)
+#define UID_CY8CPROTO_041TP                 (0x0044u)
+#define UID_CY8CPROTO_040T_MS               (0x0045u)
 #define MBED_ID_CY8CKIT_062S2_AI            "1914"
+#define MBED_ID_CY8CPROTO_041TP             "1915"
+#define MBED_ID_CY8CPROTO_040T_MS           "1916"
 #define MBED_ID_UNSPECIFIED                 "19FF"
 #define RESP_UID_PROG_OPT_AI                (9u)
-#define UID_PROG_OPT_AI                     (0x0Bu)
+#define UID_PROG_OPT_DAPLINK                (0x0Bu)
 #define RESP_UID_CHECKSUM_AI                (62u)
 #define UID_CHECKSUM_AI                     (0xFAu)
+#define UID_CHECKSUM_041TP                  (0xBFu)
+#define UID_CHECKSUM_040T_MS                (0x46u)
 
 /* Enum for Basic DAP Vendor Response */
 enum

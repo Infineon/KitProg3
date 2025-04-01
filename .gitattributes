@@ -1,4 +1,6 @@
 *.c       text eol=crlf
 *.h       text eol=crlf
+*.sh      text eol=lf
+*.bash    text eol=lf
 KitProg3.inf binary
 KitProg3UART.inf binary
