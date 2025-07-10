@@ -1044,7 +1044,7 @@ void Bridge_InterfaceHandler(void)
             case STATE_I2C_RW_STARTED:
             /* Check if the time to send alive message to host
             * Timer is down counting, that is why old minus new value is correct interval*/
-            if ((waitResponseTimer - Timer_CSTick_ReadCounter()) >= (uint16_t)TIMER_CSTICK_RATE)
+            if (((uint16_t)(waitResponseTimer - Timer_CSTick_ReadCounter())) >= ((uint16_t)(TIMER_CSTICK_RATE)))
             {
                 waitResponseTimer = Timer_CSTick_ReadCounter();
                 uint32_t intrMask = CyUsbIntDisable();
