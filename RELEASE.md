@@ -1,13 +1,11 @@
-### KitProg3 v2.80.1 Release Notes
+### KitProg3 v2.81.0 Release Notes
 
-KitProg3 is our low-level communication firmware for programming and debugging. It provides communication between a programming tool (such as CYPRESS™ Programmer or PSoC™ Programmer) and a target, such as a PSoC™ 6 MCU. KitProg3 supports a variety of development kits. It is also the communication firmware found in the MiniProg4 debug probe.
+KitProg3 is our low-level communication firmware for programming and debugging. It provides communication between a programming tool (such as CYPRESS™ Programmer or PSoC™ Programmer) and a target, such as a PSE84 and other MCUs. KitProg3 supports a variety of development kits. It is also the communication firmware found in the MiniProg4 debug probe.
 Our development kits have KitProg3 firmware installed to provide the necessary communication between the host and target. As a result, when you plug the kit into your host computer, programming and debugging just work.
 
 ### New Features
 
-- Fixed issues:
-  1. Only half of flash can be written for CY8CPROTO-041TP kit in DAPLink mode using bin-file
-  2. Fix unreliable i2c wait response due to timer issue
+- Added support for Half-Duplex mode
 
 ### Known Issues
 
@@ -38,4 +36,4 @@ Our development kits have KitProg3 firmware installed to provide the necessary c
 
 -   [Cypress Semiconductor, an Infineon Technologies Company](http://www.infineon.com)
 
-© Cypress Semiconductor Corporation, 2019-2025. This document is the property of Cypress Semiconductor Corporation, an Infineon Technologies company, and its affiliates ("Cypress").
+© Infineon Technologies AG, 2019-2026. This document is the property of Infineon Technologies AG and its affiliates ("Infineon").

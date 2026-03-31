@@ -125,7 +125,7 @@ static bool ValidateBootloader(void)
 * Handles bootloader operations, normally does not return.
 *
 *******************************************************************************/
-int main()
+int main(void)
 {
     CyGlobalIntEnable;
     

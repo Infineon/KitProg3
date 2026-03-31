@@ -14,34 +14,35 @@
 *
 *
 ******************************************************************************
-* (c) (2018-2023), Cypress Semiconductor Corporation (an Infineon company)
-* or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
+* (c) (2018-2026), Infineon Technologies AG, 
+* or an affiliate of Infineon Technologies AG. All rights reserved.
 *
-* This software, associated documentation and materials ("Software") is
-* owned by Cypress Semiconductor Corporation or one of its
-* affiliates ("Cypress") and is protected by and subject to worldwide
-* patent protection (United States and foreign), United States copyright
-* laws and international treaty provisions. Therefore, you may use this
-* Software only as provided in the license agreement accompanying the
-* software package from which you obtained this Software ("EULA"). If
-* no EULA applies, then any reproduction, modification, translation,
-* compilation, or representation of this Software is prohibited without
-* the express written permission of Cypress.
+* This software, associated documentation and materials ("Software") is 
+* owned by Infineon Technologies AG or one of its 
+* affiliates ("Infineon") and is protected by and subject to worldwide 
+* patent protection, worldwide copyright 
+* laws, and international treaty provisions. Therefore, you may use this 
+* Software only as provided in the license agreement accompanying the 
+* software package from which you obtained this Software. If 
+* no license agreement applies, then any use, reproduction, modification, 
+* translation, or compilation of this Software is prohibited without 
+* the express written permission of Infineon.
 *
-* Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO
-* WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING,
-* BUT NOT LIMITED TO, NONINFRINGEMENT, IMPLIED
-* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
-* PARTICULAR PURPOSE. Cypress reserves the right to make
-* changes to the Software without notice. Cypress does not assume any
-* liability arising out of the application or use of the Software or any
-* product or circuit described in the Software. Cypress does not authorize
-* its products for use in any products where a malfunction or failure
-* of the Cypress product may reasonably be expected to result in significant
-* property damage, injury or death ("High Risk Product").
-* By including Cypress's product in a High Risk Product, the manufacturer
-* of such system or application assumes all risk of such use and in doing
-* so agrees to indemnify Cypress against all liability.
+* Disclaimer: UNLESS OTHERWISE EXPRESSLY AGREED WITH INFINEON, THIS 
+* SOFTWARE IS PROVIDED AS-IS, WITH NO WARRANTY OF ANY KIND, EXPRESS
+* OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, ALL WARRANTIES OF 
+* NON-INFRINGEMENT OF THIRD-PARTY RIGHTS AND IMPLIED WARRANTIES SUCH 
+* AS WARRANTIES OF FITNESS FOR A SPECIFIC USE/PURPOSE OR MERCHANTABILITY. 
+* Infineon reserves the right to make changes to the Software without notice. 
+* You are responsible for properly designing, programming, and testing the 
+* functionality and safety of your intended application of the Software, 
+* as well as complying with any legal requirements related to its use. 
+* Infineon does not guarantee that the Software will be free from 
+* intrusion, data theft or loss, or other breaches (“Security Breaches”), 
+* and Infineon shall have no liability arising out of any Security Breaches. 
+* Unless otherwise explicitly approved by Infineon, the Software may not be 
+* used in any application where a failure of the Product or any consequences 
+* of the use thereof can reasonably be expected to result in personal injury.
 *****************************************************************************/
 
 #include "bridgesInterface.h"
@@ -89,6 +90,9 @@ static uint8_t responseOffset;
 static uint16_t waitResponseTimer = 0u;
 
 static uint8_t bufferI2c[64u];
+
+/* Half-Duplex echo suppression: size of last transmitted packet to suppress (0 = no suppression) */
+static uint16_t uartEchoSuppressSize = 0u;
 
 /* GPIO pin info for 3[5] (Port 3 Pin 5) */
 static volatile gpio_pin_t p35GpioPin = {
@@ -984,7 +988,7 @@ static uint32_t I2cSpi_GetSetSpeed(const uint8_t *request, uint8_t *response)
             response[PROTOCOL_SPEED_BYTE2_OFFSET] = 0u;
             response[PROTOCOL_SPEED_BYTE3_OFFSET] = 0u;
             response[PROTOCOL_SPEED_BYTE4_OFFSET] = 0u;
-            num += (3UL << 16) | 6UL; /* 3 bytes in request, 6 bytes in response */
+            num += PACK_RESP_LEN(3, 6);
         }
         else if (request[PROTOCOL_INTERFACE_OFFSET] == PROTOCOL_SPI)
         {
@@ -995,7 +999,7 @@ static uint32_t I2cSpi_GetSetSpeed(const uint8_t *request, uint8_t *response)
             response[PROTOCOL_SPEED_BYTE3_OFFSET] = LO8(HI16(spiActSpeed));
             response[PROTOCOL_SPEED_BYTE4_OFFSET] = HI8(HI16(spiActSpeed));
             response[PROTOCOL_MODE_OFFSET] = 0u;
-            num += (3UL << 16) | 7U;
+            num += PACK_RESP_LEN(3, 7);
 
             /* cpol */
             if ((SPIM_HW_CONTROL_REG & SPIM_HW_CTRL_CPOL_SET) != 0u)
@@ -1276,7 +1280,7 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
             else
             {
                 response[PROTOCOL_STATUS_OFFSET] = CMD_STAT_FAIL_INV_PAR;
-                num = (1UL << 16) | 1UL;
+                num = PACK_RESP_LEN(1, 1);
             }
         }
         break;
@@ -1321,7 +1325,7 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
         else
         {
             response[PROTOCOL_CMD_OFFSET] = ID_DAP_Invalid;
-            num += ((1UL << 16) | 1UL);
+            num += PACK_RESP_LEN(1, 1);
         }
         break;
 
@@ -1335,7 +1339,7 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
         else
         {
             response[PROTOCOL_CMD_OFFSET] = ID_DAP_Invalid;
-            num += ((1UL << 16) | 1UL);
+            num += PACK_RESP_LEN(1, 1);
         }
         break;
 
@@ -1349,7 +1353,7 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
         else
         {
             response[PROTOCOL_CMD_OFFSET] = ID_DAP_Invalid;
-            num += ((1UL << 16) | 1UL);
+            num += PACK_RESP_LEN(1, 1);
         }
         break;
 
@@ -1363,7 +1367,7 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
         else
         {
             response[PROTOCOL_CMD_OFFSET] = ID_DAP_Invalid;
-            num += ((1UL << 16) | 1UL);
+            num += PACK_RESP_LEN(1, 1);
         }
         break;
 
@@ -1378,7 +1382,7 @@ uint32_t Bridge_ProcessCommand(const uint8_t *request, uint8_t *response)
 
     default:
         response[PROTOCOL_CMD_OFFSET] = ID_DAP_Invalid;
-        num += ((1UL << 16) | 1UL);
+        num += PACK_RESP_LEN(1, 1);
         break;
 
     }
@@ -1484,7 +1488,7 @@ static void UartRtsnSetMode(uint8_t comPort, uint8_t mode)
 /*******************************************************************************
 * UsbUartRtsEventHandler
 ********************************************************************************
-* USB evant handling to enforce UART RTS pin state for Kit with HWID 0x0C
+* USB event handling to enforce UART RTS pin state for Kit with HWID 0x0C
 *
 * @param[in] comPort - UART number
 * @param[in] eventType - RTS_FLAG_PWRON_OR_RESET(0x01u) - powering on or target HW reset event
@@ -1724,7 +1728,7 @@ static void UsbUartTransmit(uint8_t comPort)
         uart_bridge_t const *port = &uart[comPort];
 
         /* Check for USB host packet */
-        if(USBFS_GetEPState(port->uartOutEp) == USBFS_OUT_BUFFER_FULL)
+        if((USBFS_GetEPState(port->uartOutEp) == USBFS_OUT_BUFFER_FULL) && (uartEchoSuppressSize == 0u))
         {
             /* Get size of packet */
             uint16_t size = USBFS_GetEPCount(port->uartOutEp);
@@ -1746,6 +1750,13 @@ static void UsbUartTransmit(uint8_t comPort)
 
                 /* Send to UART Tx */
                 port->UartPutArray(usbuartTxBuffer, size);
+                
+                /* Half-Duplex echo suppression: mark echo packet for suppression */
+                bool primaryUartHalfDuplex = KitPrimaryUartHalfDuplex();
+                if ((comPort == 0u) && primaryUartHalfDuplex)
+                {
+                    uartEchoSuppressSize = size;
+                }
             }
             // LED OFF for dedicated port
             (* port->UartLed)(0);
@@ -1830,7 +1841,35 @@ static void UsbUartReceive(uint8_t comPort)
 
             static uint16_t uartInEpLastSent[2u] = {0u, 0u}; /* The last sent size is required for the ZLP generation logic */
 
-            if ( (wCount != 0u) || (uartInEpLastSent[comPort] == USBINPACKETSIZE) )
+            /* Half-Duplex echo suppression: suppress echo bytes cumulatively */
+            bool suppressEcho = false;
+            bool primaryUartHalfDuplex = KitPrimaryUartHalfDuplex();
+            if ((comPort == 0u) && primaryUartHalfDuplex && (uartEchoSuppressSize != 0u) && (wCount > 0u))
+            {
+                if (wCount <= uartEchoSuppressSize)
+                {
+                    /* Entire packet is echo - suppress it */
+                    suppressEcho = true;
+                    uartEchoSuppressSize -= wCount;
+                    /* Reset ZLP tracking since we're not sending this packet */
+                    uartInEpLastSent[comPort] = 0u;
+                }
+                else
+                {
+                    /* Packet has echo at start + real data after */
+                    uint16_t realDataBytes = wCount - uartEchoSuppressSize;
+                    
+                    /* Shift real data to beginning */
+                    for (uint16_t shiftIndex = 0u; shiftIndex < realDataBytes; shiftIndex++)
+                    {
+                        usbuartRxBuffer[shiftIndex] = usbuartRxBuffer[shiftIndex + uartEchoSuppressSize];
+                    }
+                    wCount = realDataBytes;
+                    uartEchoSuppressSize = 0u;
+                }
+            }
+
+            if (!suppressEcho && ((wCount != 0u) || (uartInEpLastSent[comPort] == USBINPACKETSIZE)))
             {
                 /* Send out data */
                 uint32_t intrMask = CyUsbIntDisable();
@@ -1890,7 +1929,6 @@ void UsbUartStart(void)
 
     /* Initialize CDC Interface for USB-UART Bridge */
     (void)USBFS_CDC_Init();
-
 
     Pin_UART_Tx_SetDriveMode(Pin_UART_Tx_DM_STRONG);
 
@@ -2238,7 +2276,7 @@ uint32_t Bridge_GpioSetMode(const uint8_t * request, uint8_t *response)
     {
         response[GENERAL_RESPONSE_STATUS] = CMD_STAT_FAIL_INV_PAR;
     }
-    retVal += ((3UL << 16) | 2UL);
+    retVal += PACK_RESP_LEN(3, 2);
     return (retVal);
 }
 
@@ -2294,7 +2332,7 @@ uint32_t Bridge_GpioSetState(const uint8_t * request, uint8_t *response)
         response[GENERAL_RESPONSE_STATUS] = CMD_STAT_FAIL_INV_PAR;
     }
 
-    retVal += ((3UL << 16) | 2UL);
+    retVal += PACK_RESP_LEN(3, 2);
     return (retVal);
 }
 
@@ -2322,12 +2360,12 @@ uint32_t Bridge_GpioReadState(const uint8_t * request, uint8_t *response)
     {
         response[GENERAL_RESPONSE_STATUS] = DAP_OK;
         response[GENERAL_RESPONSE_RESULT] = (CyPins_ReadPin((reg8 *)curPin->pinReg) != 0u) ? 1u : 0u;
-        retVal += (2UL << 16) | 3UL;
+        retVal += PACK_RESP_LEN(2, 3);
     }
     else
     {
         response[GENERAL_RESPONSE_STATUS] = CMD_STAT_FAIL_INV_PAR;
-        retVal += (2UL << 16) | 2UL;
+        retVal += PACK_RESP_LEN(2, 2);
     }
 
     return (retVal);
@@ -2363,22 +2401,61 @@ uint32_t Bridge_GpioStateChanged(const uint8_t * request, uint8_t *response)
         /* Form response */
         response[GENERAL_RESPONSE_STATUS] = DAP_OK;
         response[GENERAL_RESPONSE_RESULT] = stateChange;
-        retVal += (2UL << 16) | 3UL;
+        retVal += PACK_RESP_LEN(2, 3);
     }
     else
     {
         response[GENERAL_RESPONSE_STATUS] = CMD_STAT_FAIL_INV_PAR;
-        retVal += (2UL << 16) | 2UL;
+        retVal += PACK_RESP_LEN(2, 2);
     }
 
     return (retVal);
 }
 
 
+/*******************************************************************************
+* Bridge_SetUartTxDriveMode
+********************************************************************************
+* Sets the UART TX pin based on duplex mode
+* @param[in] uartMode - UART duplex mode (UART_FULL_DUPLEX_MODE, UART_HALF_DUPLEX_MODE, or DEFAULT_MODE)
+*******************************************************************************/
+void Bridge_SetUartTxDriveMode(uint8_t uartMode)
+{
+    /* Only primary UART supports duplex mode switching */
+    if (uartMode == UART_HALF_DUPLEX_MODE)
+    {
+        /* Half-Duplex: Open Drain, Drives Low (requires external pull-up) */
+        Pin_UART_Tx_SetDriveMode(Pin_UART_Tx_DM_OD_LO);
+    }
+    else if ((uartMode == UART_FULL_DUPLEX_MODE) || (uartMode == DEFAULT_UART_MODE))
+    {
+        /* Full-Duplex (default): Strong Drive */
+        Pin_UART_Tx_SetDriveMode(Pin_UART_Tx_DM_STRONG);
+    }
+    else
+    {
+        /* else: invalid mode - no action taken, pin remains in current state */
+    }
+}
+
+/*******************************************************************************
+* GetUartFlowControlState
+********************************************************************************
+* Reads the current UART hardware flow control state for the specified UART port
+* @param[in] uartPort - UART port (PROTOCOL_PRIMARY_UART or PROTOCOL_SECONDARY_UART)
+* @return Current flow control state (PROTOCOL_SET_HW_FLOW_CONTROL or PROTOCOL_SET_NO_FLOW_CONTROL)
+*******************************************************************************/
+static uint8_t GetUartFlowControlState(uint8_t uartPort)
+{
+    return (uartPort == PROTOCOL_PRIMARY_UART) ? 
+        (KitPrimaryUartHwControl() ? PROTOCOL_SET_HW_FLOW_CONTROL : PROTOCOL_SET_NO_FLOW_CONTROL) :
+        (KitSecondaryUartHwControl() ? PROTOCOL_SET_HW_FLOW_CONTROL : PROTOCOL_SET_NO_FLOW_CONTROL);
+}
+
 /******************************************************************************
-*  GetSetHwContol
+*  GetSetUartConfig
 ***************************************************************************//**
-* Combined command for setting and getting UART HW flow control
+* Combined command for setting and getting UART configuration (HW flow control and duplex mode)
 * @param[in] request The pointer to the request string.
 *
 * @param[out] response The pointer to the memory that will be used for storing
@@ -2386,76 +2463,134 @@ uint32_t Bridge_GpioStateChanged(const uint8_t * request, uint8_t *response)
 *
 * returns (num of bytes in request << 16) | (num of bytes in response)
 *******************************************************************************/
-uint32_t GetSetHwContol(const uint8_t *request, uint8_t *response)
+uint32_t GetSetUartConfig(const uint8_t *request, uint8_t *response)
 {
     uint32_t retVal = 0u;
-    uint8_t setGet = request[CONFIG_UART_REQUEST_COMMAND];
+    uint8_t command = request[CONFIG_UART_REQUEST_COMMAND];
     uint8_t uartPort = request[CONFIG_UART_REQUEST_PORT];
     uint8_t uartMode = request[CONFIG_UART_REQUEST_MODE];
     bool parametersAreValid = false;
+
+    if ((!KitHasUartHwFlowControl() && ((command == PROTOCOL_GET_UART_FLOW_CONTROL) || (command == PROTOCOL_SET_UART_FLOW_CONTROL))) ||
+        (!KitSupportsUartHalfDuplex() && ((command == PROTOCOL_GET_UART_MODE) || (command == PROTOCOL_SET_UART_MODE))))
+    {
+        response[PROTOCOL_CMD_OFFSET] = ID_DAP_Invalid;
+        return ID_DAP_DEF_CASE_RESP_LEN;
+    }
     
-    /* Check if parameters are valid */
-    parametersAreValid = (((uartPort == PROTOCOL_PRIMARY_UART) || (KitHasSecondaryUart() && (uartPort == PROTOCOL_SECONDARY_UART))) && 
-    ((setGet != PROTOCOL_READ_UART_FLOW_CONTROL) ? ((uartMode == PROTOCOL_SET_NO_FLOW_CONTROL) ||
-    (uartMode == PROTOCOL_SET_HW_FLOW_CONTROL)) : true));
+    /* Validate command parameters */
+    bool validPort = (uartPort == PROTOCOL_PRIMARY_UART) || 
+                     (KitHasSecondaryUart() && (uartPort == PROTOCOL_SECONDARY_UART));
+    bool validFlowMode = (uartMode == PROTOCOL_SET_NO_FLOW_CONTROL) || 
+                         (uartMode == PROTOCOL_SET_HW_FLOW_CONTROL);
+    bool validDuplexMode = (uartMode == PROTOCOL_SET_FULL_DUPLEX) || 
+                           (uartMode == PROTOCOL_SET_HALF_DUPLEX);
     
+    switch (command)
+    {
+        case PROTOCOL_GET_UART_FLOW_CONTROL:
+            parametersAreValid = KitHasUartHwFlowControl() && validPort;
+            break;
+            
+        case PROTOCOL_SET_UART_FLOW_CONTROL:
+            parametersAreValid = KitHasUartHwFlowControl() && validPort && validFlowMode;
+            break;
+            
+        case PROTOCOL_GET_UART_MODE:
+            parametersAreValid = (uartPort == PROTOCOL_PRIMARY_UART);
+            break;
+            
+        case PROTOCOL_SET_UART_MODE:
+            parametersAreValid = (uartPort == PROTOCOL_PRIMARY_UART) && validDuplexMode;
+            break;
+            
+        default:
+            parametersAreValid = false;
+            break;
+    }
+
     if (!parametersAreValid)
     {
         response[GENERAL_RESPONSE_STATUS] = CMD_STAT_FAIL_INV_PAR;
-        retVal += (2UL << 16) | 2UL;
+        retVal += PACK_RESP_LEN(2, 2);
+        return retVal;
     }
-    else
+    
+    switch (command)
     {
-        /* Read the current value of the UART HW Contol flow */
-        if (setGet == PROTOCOL_READ_UART_FLOW_CONTROL)
+        case PROTOCOL_GET_UART_FLOW_CONTROL:
         {
-            if (uartPort == PROTOCOL_PRIMARY_UART)
-            {
-                bool cachedPrimaryFlowCtrl = KitPrimaryUartHwControl();
-                response[GENERAL_RESPONSE_RESULT] = (cachedPrimaryFlowCtrl) ? PROTOCOL_SET_HW_FLOW_CONTROL 
-                : PROTOCOL_SET_NO_FLOW_CONTROL;
-            }
-            else
-            {
-                bool cachedSecondaryFlowCtrl = KitSecondaryUartHwControl();
-                response[GENERAL_RESPONSE_RESULT] = (cachedSecondaryFlowCtrl) ? PROTOCOL_SET_HW_FLOW_CONTROL 
-                : PROTOCOL_SET_NO_FLOW_CONTROL;
-            }
+            /* Read the current value of the UART HW Control flow */
+            response[GENERAL_RESPONSE_RESULT] = GetUartFlowControlState(uartPort);
+            response[GENERAL_RESPONSE_STATUS] = CMD_STAT_SUCCESS;
+            retVal += PACK_RESP_LEN(2, 3);
+            break;
+        }
+        
+        case PROTOCOL_SET_UART_FLOW_CONTROL:
+        {
+            uint8_t flowControlValue = (uartMode == PROTOCOL_SET_NO_FLOW_CONTROL) ? 
+                UART_NO_FLOW_CONTROL : UART_HW_FLOW_CONTROL;
+            uint8_t eepromByte = (uartPort == PROTOCOL_PRIMARY_UART) ? 
+                PRI_UART_FLOW_CTRL_BYTE : SEC_UART_FLOW_CTRL_BYTE;
             
-            response[GENERAL_RESPONSE_STATUS] = CMD_STAT_SUCCESS;
-            retVal += (2UL << 16) | 3UL;
-        }
-        else
-        {
-            if (uartPort == PROTOCOL_PRIMARY_UART)
+            if (CySetTemp() == CYRET_SUCCESS)
             {
-                if (CySetTemp() == CYRET_SUCCESS)
-                {
-                    (void)EEPROM_ModeStorage_ByteWrite((uartMode == PROTOCOL_SET_NO_FLOW_CONTROL) ?
-                    UART_NO_FLOW_CONTROL : UART_HW_FLOW_CONTROL , 0u, PRI_UART_FLOW_CTRL_BYTE);
-                    bool cachedPrimaryFlowCtrl = KitPrimaryUartHwControl();
-                    response[GENERAL_RESPONSE_RESULT] = (cachedPrimaryFlowCtrl) ? PROTOCOL_SET_HW_FLOW_CONTROL 
-                    :PROTOCOL_SET_NO_FLOW_CONTROL;
-                }
+                (void)EEPROM_ModeStorage_ByteWrite(flowControlValue, 0u, eepromByte);
+                response[GENERAL_RESPONSE_RESULT] = GetUartFlowControlState(uartPort);
+                response[GENERAL_RESPONSE_STATUS] = CMD_STAT_SUCCESS;
+                retVal += PACK_RESP_LEN(3, 3);
             }
             else
             {
-                if (KitHasSecondaryUart())
-                {
-                    if (CySetTemp() == CYRET_SUCCESS)
-                    {
-                        (void)EEPROM_ModeStorage_ByteWrite((uartMode == PROTOCOL_SET_NO_FLOW_CONTROL) 
-                        ? UART_NO_FLOW_CONTROL : UART_HW_FLOW_CONTROL , 0u, SEC_UART_FLOW_CTRL_BYTE);
-                        bool cachedSecondaryFlowCtrl = KitSecondaryUartHwControl();
-                        response[GENERAL_RESPONSE_RESULT] = (cachedSecondaryFlowCtrl) ? PROTOCOL_SET_HW_FLOW_CONTROL 
-                    :PROTOCOL_SET_NO_FLOW_CONTROL;
-                    }
-                }
+                /* Temperature check failed - cannot write to EEPROM */
+                response[GENERAL_RESPONSE_STATUS] = CMD_STAT_FAIL_OP_FAIL;
+                retVal += PACK_RESP_LEN(3, 2);
             }
-            response[GENERAL_RESPONSE_STATUS] = CMD_STAT_SUCCESS;
-            retVal += (3UL << 16) | 3UL;
+            break;
         }
+        
+        case PROTOCOL_GET_UART_MODE:
+        {
+            /* Read the current value of the UART duplex mode (only supported for primary UART) */
+            bool primaryUartHalfDuplex = KitPrimaryUartHalfDuplex();
+            response[GENERAL_RESPONSE_RESULT] = 
+                primaryUartHalfDuplex ? PROTOCOL_SET_HALF_DUPLEX : PROTOCOL_SET_FULL_DUPLEX;
+            response[GENERAL_RESPONSE_STATUS] = CMD_STAT_SUCCESS;
+            retVal += PACK_RESP_LEN(2, 3);
+            break;
+        }
+        
+        case PROTOCOL_SET_UART_MODE:
+        {
+            if (CySetTemp() == CYRET_SUCCESS)
+            {
+                /* Convert protocol value to internal mode value:
+                 * Protocol 0x00 (Full-Duplex) -> Internal 0x01 (UART_FULL_DUPLEX_MODE)
+                 * Protocol 0x01 (Half-Duplex) -> Internal 0x02 (UART_HALF_DUPLEX_MODE) */
+                uint8_t newMode = (uartMode == PROTOCOL_SET_FULL_DUPLEX) ? 
+                    UART_FULL_DUPLEX_MODE : UART_HALF_DUPLEX_MODE;
+                (void)EEPROM_ModeStorage_ByteWrite(newMode, 0u, PRI_UART_MODE);
+                
+                /* Return protocol value based on what was written:
+                 * Internal 0x02 (UART_HALF_DUPLEX_MODE) -> Protocol 0x01 (Half-Duplex)
+                 * Internal 0x01 or 0x00 -> Protocol 0x00 (Full-Duplex) */
+                response[GENERAL_RESPONSE_RESULT] = 
+                    (newMode == UART_HALF_DUPLEX_MODE) ? PROTOCOL_SET_HALF_DUPLEX : PROTOCOL_SET_FULL_DUPLEX;
+                response[GENERAL_RESPONSE_STATUS] = CMD_STAT_SUCCESS;
+                retVal += PACK_RESP_LEN(3, 3);
+            }
+            else
+            {
+                /* Temperature check failed - cannot write to EEPROM */
+                response[GENERAL_RESPONSE_STATUS] = CMD_STAT_FAIL_OP_FAIL;
+                retVal += PACK_RESP_LEN(3, 2);
+            }
+            break;
+        }
+
     }
+    
     return retVal;
 }
 

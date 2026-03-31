@@ -30,6 +30,6 @@ Note, this KitProg3 firmware source code is without the DapLink code part, which
 -   [ModusToolbox™ Software Environment, Quick Start Guide, Documentation, and
     Videos](https://www.infineon.com/modustoolbox)
 
--   [Cypress Semiconductor, an Infineon Technologies Company](http://www.cypress.com)
+-   [Infineon Technologies AG](https://www.infineon.com/)
 
-© Cypress Semiconductor Corporation, 2019-2025. This document is the property of Cypress Semiconductor Corporation, an Infineon Technologies company, and its affiliates ("Cypress").
+© Infineon Technologies AG, 2019-2026. This document is the property of Infineon Technologies AG and its affiliates ("Infineon").
