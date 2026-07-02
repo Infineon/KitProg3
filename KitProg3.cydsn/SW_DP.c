@@ -312,7 +312,7 @@ void setSWD_Transfer_ptr(uint8_t mode)
     switch(mode)
     {
         case SWD_IMPL_HW:
-            SWD_Transfer_ptr = &Swd_TransferHw;
+            SWD_Transfer_ptr = &Swd_TransferHwImpl;
             break;
         case SWD_IMPL_SW_FAST:
             SWD_Transfer_ptr = &SWD_TransferFast;

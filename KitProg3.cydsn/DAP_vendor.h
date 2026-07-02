@@ -55,9 +55,9 @@
 #include "swd.h"
 
 
-#define KHPI_VER                            "2.05"
+#define KHPI_VER                            "2.06"
 #define KHPI_VER_MAJOR                      (2u)
-#define KHPI_VER_MINOR                      (5u)
+#define KHPI_VER_MINOR                      (6u)
 
 #define CMD_STAT_SUCCESS                    (0x00u)
 #define CMD_STAT_WAIT                       (0x01u)
@@ -158,6 +158,10 @@
 #define UID_CHECKSUM_AI                     (0xFAu)
 #define UID_CHECKSUM_041TP                  (0xBFu)
 #define UID_CHECKSUM_040T_MS                (0x46u)
+
+/* Subcommand values for Bridge_OnOff (command 0x94) */
+#define BRIDGE_DISABLE                      (0x01u)
+#define BRIDGE_ENABLE                       (0x00u)
 
 /* Enum for Basic DAP Vendor Response */
 enum

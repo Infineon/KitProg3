@@ -1577,8 +1577,10 @@ static uint16_t UsbUartCalculateDivider(uint32_t dteRate, uint8_t * clockSource)
         uint32_t diffPll = ((dteRate >= ratePll) ? (dteRate - ratePll) : (ratePll - dteRate)) % dteRate;
         uint32_t diffImo = ((dteRate >= rateImo) ? (dteRate - rateImo) : (rateImo - dteRate)) % dteRate;
 
-        /* If use of either Clock Source is possible or PLL option is preferred*/
-        if ((diffPll == diffImo) || (diffPll < diffImo))
+        /* If PLL is preferred and its divider fits in uint16_t, use PLL; otherwise use IMO.
+         * dividerPll can exceed 'UINT16_MAX - 1u' at very low baud rates as per UART component limitations,
+         * causing a silent truncation on cast. */
+        if (((diffPll == diffImo) || (diffPll < diffImo)) && (dividerPll <= ((uint32_t)UINT16_MAX - 1u)))
         {
             *clockSource = CYCLK_SRC_SEL_PLL;
             divider =  (uint16_t)dividerPll;
@@ -2610,6 +2612,83 @@ void GPIO_isr_Interrupt_InterruptCallback(void)
     /* Update current state of GPIO pins */
     p35GpioPin.currentState = (CyPins_ReadPin((reg8 *)p35GpioPin.pinReg) != 0u) ? 1u : 0u;
     p36GpioPin.currentState = (CyPins_ReadPin((reg8 *)p36GpioPin.pinReg) != 0u) ? 1u : 0u;
+}
+
+
+/*******************************************************************************
+ * Bridge_OnOff
+ ********************************************************************************
+ * Handles the vendor command to enable or disable the bridge interface.
+ * When disabling, stops the SIE from accepting host packets by disabling OUT
+ * endpoints. When re-enabling, re-arms the endpoints so any data buffered by
+ * the host OS is delivered normally.
+ *
+ * @param[in]  request   Pointer to incoming USB packet.
+ *                       request[1]: 0x01 = disable bridge, 0x00 = enable bridge
+ * @param[out] response  Pointer to the memory for storing the response.
+ *
+ * @return (num of bytes in request << 16) | (num of bytes in response)
+ *******************************************************************************/
+uint32_t Bridge_OnOff(const uint8_t *request, uint8_t *response)
+{
+    uint8_t bridgeCommand = request[GENERAL_REQUEST_SUBCOMMAND];
+    uint8_t cachedCurrentMode = currentMode;
+    uint32_t retVal = 0u;
+    uint32_t intrMask;
+
+    if (bridgeCommand == BRIDGE_DISABLE)
+    {
+        /* Disable OUT endpoints to stop receiving data from host and effectively disable the bridge.
+         * This will cause the host OS USB driver to buffer any packets sent by the host until the
+         * endpoints are re-enabled, at which point all buffered packets will be delivered. */
+        intrMask = CyUsbIntDisable();
+        USBFS_DisableOutEP(uart[0u].uartOutEp);
+        if (cachedCurrentMode == MODE_BULK2UARTS)
+        {
+            USBFS_DisableOutEP(uart[1u].uartOutEp);
+        }
+        else
+        {
+            USBFS_DisableOutEP(BRIDGE_INTERFACE_OUT_ENDP);
+        }
+        CyUsbIntEnable(intrMask);
+
+        bridgeOff = true;
+        response[GENERAL_RESPONSE_STATUS] = CMD_STAT_SUCCESS;
+        response[GENERAL_RESPONSE_RESULT] = BRIDGE_DISABLE;
+        retVal = PACK_RESP_LEN(2, 3);
+    }
+    else if (bridgeCommand == BRIDGE_ENABLE)
+    {
+        /* Re-arm OUT endpoints. Any data held in the host OS USB driver queue
+         * will be delivered after re-arming and passed through to the target. */
+        intrMask = CyUsbIntDisable();
+        USBFS_EnableOutEP(uart[0u].uartOutEp);
+
+        if (cachedCurrentMode == MODE_BULK2UARTS)
+        {
+            USBFS_EnableOutEP(uart[1u].uartOutEp);
+        }
+        else
+        {
+            USBFS_EnableOutEP(BRIDGE_INTERFACE_OUT_ENDP);
+        }
+
+        CyUsbIntEnable(intrMask);
+
+        bridgeOff = false;
+        response[GENERAL_RESPONSE_STATUS] = CMD_STAT_SUCCESS;
+        response[GENERAL_RESPONSE_RESULT] = BRIDGE_ENABLE;
+        retVal = PACK_RESP_LEN(2, 3);
+    }
+    else
+    {
+        /* Unknown subcommand — do not change bridge state */
+        response[GENERAL_RESPONSE_STATUS] = CMD_STAT_FAIL_INV_PAR;
+        retVal = PACK_RESP_LEN(2, 2);
+    }
+
+    return (retVal);
 }
 
 /* [] END OF FILE */

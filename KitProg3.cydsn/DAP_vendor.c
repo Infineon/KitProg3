@@ -268,6 +268,10 @@ uint32_t DAP_ProcessVendorCommand(const uint8_t *request, uint8_t *response) {
             /* Command 0x93 */
             num = ((1UL << 16) | GetSetUartConfig(request, response));
             break;
+        case ID_DAP_Vendor20:
+            /* Command 0x94 */
+            num = Bridge_OnOff(request, response);
+            break;
         default:
         {
             /* Move response pointer back to byte 0 */

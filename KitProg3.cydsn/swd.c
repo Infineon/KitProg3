@@ -4,7 +4,7 @@
 * @brief
 *  This file provides the source code to handle SWD programming.
 *
-* @version KitProg3 v2.60
+* @version KitProg3 v2.82
 */
 /*
 * Related Documents:
@@ -14,35 +14,36 @@
 *
 *
 ******************************************************************************
-* (c) (2018-2022), Cypress Semiconductor Corporation (an Infineon company)
-* or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
+* (c) 2018-2026, Infineon Technologies AG, 
+* or an affiliate of Infineon Technologies AG. All rights reserved.
 *
-* This software, associated documentation and materials ("Software") is
-* owned by Cypress Semiconductor Corporation or one of its
-* affiliates ("Cypress") and is protected by and subject to worldwide
-* patent protection (United States and foreign), United States copyright
-* laws and international treaty provisions. Therefore, you may use this
-* Software only as provided in the license agreement accompanying the
-* software package from which you obtained this Software ("EULA"). If
-* no EULA applies, then any reproduction, modification, translation,
-* compilation, or representation of this Software is prohibited without
-* the express written permission of Cypress.
+* This software, associated documentation and materials ("Software") is 
+* owned by Infineon Technologies AG or one of its 
+* affiliates ("Infineon") and is protected by and subject to worldwide 
+* patent protection, worldwide copyright 
+* laws, and international treaty provisions. Therefore, you may use this 
+* Software only as provided in the license agreement accompanying the 
+* software package from which you obtained this Software. If 
+* no license agreement applies, then any use, reproduction, modification, 
+* translation, or compilation of this Software is prohibited without 
+* the express written permission of Infineon.
 *
-* Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO
-* WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING,
-* BUT NOT LIMITED TO, NONINFRINGEMENT, IMPLIED
-* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
-* PARTICULAR PURPOSE. Cypress reserves the right to make
-* changes to the Software without notice. Cypress does not assume any
-* liability arising out of the application or use of the Software or any
-* product or circuit described in the Software. Cypress does not authorize
-* its products for use in any products where a malfunction or failure
-* of the Cypress product may reasonably be expected to result in significant
-* property damage, injury or death ("High Risk Product").
-* By including Cypress's product in a High Risk Product, the manufacturer
-* of such system or application assumes all risk of such use and in doing
-* so agrees to indemnify Cypress against all liability.
-*****************************************************************************/
+* Disclaimer: UNLESS OTHERWISE EXPRESSLY AGREED WITH INFINEON, THIS 
+* SOFTWARE IS PROVIDED AS-IS, WITH NO WARRANTY OF ANY KIND, EXPRESS
+* OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, ALL WARRANTIES OF 
+* NON-INFRINGEMENT OF THIRD-PARTY RIGHTS AND IMPLIED WARRANTIES SUCH 
+* AS WARRANTIES OF FITNESS FOR A SPECIFIC USE/PURPOSE OR MERCHANTABILITY. 
+* Infineon reserves the right to make changes to the Software without notice. 
+* You are responsible for properly designing, programming, and testing the 
+* functionality and safety of your intended application of the Software, 
+* as well as complying with any legal requirements related to its use. 
+* Infineon does not guarantee that the Software will be free from 
+* intrusion, data theft or loss, or other breaches (“Security Breaches”), 
+* and Infineon shall have no liability arising out of any Security Breaches. 
+* Unless otherwise explicitly approved by Infineon, the Software may not be 
+* used in any application where a failure of the Product or any consequences 
+* of the use thereof can reasonably be expected to result in personal injury.
+*******************************************************************************/
 
 #include "power.h"
 #include "swd.h"
@@ -76,6 +77,55 @@
                                              (SHIFT_LEFT((u8_ptr[1u]),8u))|(SHIFT_LEFT((u8_ptr[0u]),0u)))
 #define PACK_UINT8_TO_UINT32_MSB(u8_ptr)    ((SHIFT_LEFT((u8_ptr[0u]),24u))|(SHIFT_LEFT((u8_ptr[1u]),16u))| \
                                              (SHIFT_LEFT((u8_ptr[2u]),8u))|(SHIFT_LEFT((u8_ptr[3u]),0u)))
+
+
+/*
+ * pack32(ptr)
+ *
+ * Reads four consecutive bytes starting at ptr and assembles them into a
+ * uint32_t in little-endian (SWD wire) order: ptr[0] is the LSB.
+ * Safe for unaligned ptr on all targets.
+ * On little-endian builds the compiler reduces this to a single load.
+ */
+static inline uint32_t pack32(const uint8_t *ptr)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    uint32_t value;
+    __builtin_memcpy(&value, ptr, 4U);
+    return value;
+#else
+    return (uint32_t)(ptr[0U] <<  0U) |
+           (uint32_t)(ptr[1U] <<  8U) |
+           (uint32_t)(ptr[2U] << 16U) |
+           (uint32_t)(ptr[3U] << 24U);
+#endif
+}
+
+
+/*
+ * store32(buf, value)
+ *
+ * Writes value into the byte stream at *buf in little-endian (SWD wire)
+ * order: LSB first.  Advances *buf by four bytes.
+ * Safe for unaligned *buf on all targets.
+ * On little-endian builds the compiler reduces this to a single store.
+ */
+static inline uint8_t *store32(uint8_t *buf, uint32_t value)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    __builtin_memcpy(buf, &value, 4U);
+    buf += 4U;
+#else
+    *buf++ = (uint8_t) value;
+    *buf++ = (uint8_t)(value >>  8U);
+    *buf++ = (uint8_t)(value >> 16U);
+    *buf++ = (uint8_t)(value >> 24U);
+#endif
+return buf;
+}
+
+
+#define MAX_TRANSFERS_PER_REQ (DAP_PACKET_SIZE / 4U)
 
 /* SWD request phase bits */
 #define SWD_REQ_START     (1u<<0u)
@@ -226,7 +276,33 @@
 /* HW preamble from SWD transfer request creation macro */
 #define HW_PREAMBLE(req)        ((HW_PREAMBLE_TEMPLATE) | ((uint8_t)((req) & 0x0Fu) << 1u) | ((((PARITY_MAGIC) >> (uint8_t)((req) & 0x0Fu)) & 1u) << 5u))
 
-typedef struct __attribute__((packed)) {
+/* Precomputed SWD request header bytes for the hardware path.
+ * Index bits are [A3, A2, RnW, APnDP] packed into the low nibble so callers can
+ * reuse request & 0x0F directly instead of rebuilding the start/stop/park/parity
+ * decorated preamble for every transfer. */
+static const uint8_t hwPreamble[16u] =
+    {
+        /* index is [A3 Bit, A2 Bit, RnW Bit, APnDP Bit] ==> Park Bit=1, Stop Bit=0, Parity Bit, A3 Bit, A2 Bit, RnW Bit, APnDP Bit, Start Bit=1 */
+        [0x0u] = HW_PREAMBLE(0x0u), /* A3=0,A2=0,RnW=0,APnDP=0 ==> 0b0000 ==> 0b10000001*/
+        [0x1u] = HW_PREAMBLE(0x1u), /* A3=0,A2=0,RnW=0,APnDP=1 ==> 0b0001 ==> 0b10100011*/
+        [0x2u] = HW_PREAMBLE(0x2u), /* A3=0,A2=0,RnW=1,APnDP=0 ==> 0b0010 ==> 0b10100101*/
+        [0x3u] = HW_PREAMBLE(0x3u), /* A3=0,A2=0,RnW=1,APnDP=1 ==> 0b0011 ==> 0b10000111*/
+        [0x4u] = HW_PREAMBLE(0x4u), /* A3=0,A2=1,RnW=0,APnDP=0 ==> 0b0100 ==> 0b10101001*/
+        [0x5u] = HW_PREAMBLE(0x5u), /* A3=0,A2=1,RnW=0,APnDP=1 ==> 0b0101 ==> 0b10001011*/
+        [0x6u] = HW_PREAMBLE(0x6u), /* A3=0,A2=1,RnW=1,APnDP=0 ==> 0b0110 ==> 0b10001101*/
+        [0x7u] = HW_PREAMBLE(0x7u), /* A3=0,A2=1,RnW=1,APnDP=1 ==> 0b0111 ==> 0b10101111*/
+        [0x8u] = HW_PREAMBLE(0x8u), /* A3=1,A2=0,RnW=0,APnDP=0 ==> 0b1000 ==> 0b10110001*/
+        [0x9u] = HW_PREAMBLE(0x9u), /* A3=1,A2=0,RnW=0,APnDP=1 ==> 0b1001 ==> 0b10010011*/
+        [0xAu] = HW_PREAMBLE(0xAu), /* A3=1,A2=0,RnW=1,APnDP=0 ==> 0b1010 ==> 0b10010101*/
+        [0xBu] = HW_PREAMBLE(0xBu), /* A3=1,A2=0,RnW=1,APnDP=1 ==> 0b1011 ==> 0b10110111*/
+        [0xCu] = HW_PREAMBLE(0xCu), /* A3=1,A2=1,RnW=0,APnDP=0 ==> 0b1100 ==> 0b10011001*/
+        [0xDu] = HW_PREAMBLE(0xDu), /* A3=1,A2=1,RnW=0,APnDP=1 ==> 0b1101 ==> 0b10111011*/
+        [0xEu] = HW_PREAMBLE(0xEu), /* A3=1,A2=1,RnW=1,APnDP=0 ==> 0b1110 ==> 0b10111101*/
+        [0xFu] = HW_PREAMBLE(0xFu)  /* A3=1,A2=1,RnW=1,APnDP=1 ==> 0b1111 ==> 0b10011111*/
+};
+
+typedef struct __attribute__((packed))
+{
     uint8_t command;
     uint8_t data[sizeof(uint32_t)];
     uint8_t dataParity;
@@ -702,15 +778,16 @@ static void SwdGetData(uint8_t *pbData)
 }
 
 /******************************************************************************
-*  SwdAcquirePutdataBlock
-***************************************************************************//**
-* Puts data to SWD line
-*
-* @param[in]  dataBlock   Pointer to SWDWriteDataBlock_t
-*
-* @return  Boolean value representing if SWD packet ACK data.
-*
-******************************************************************************/
+ *  SwdAcquirePutdataBlock
+ ***************************************************************************/
+/**
+ * Puts data to SWD line
+ *
+ * @param[in]  dataBlock   Pointer to SWDWriteDataBlock_t
+ *
+ * @return  Boolean value representing if SWD packet ACK data.
+ *
+ ******************************************************************************/
 static bool SwdAcquirePutdataBlock(const SwdWriteDataBlock_t *dataBlock)
 {
     SWD_SET_SDA_OUT;
@@ -2238,7 +2315,7 @@ void Swd_SetHwClock(uint32_t curClock)
     }
 
     /* Update idle clock guard period */
-    idleGuardPeriod = ((uint32_t)hwIdleCycles + 1u) * hwClockSwdPeriod / 1000u;
+    idleGuardPeriod = ((uint32_t)hwIdleCycles) * hwClockSwdPeriod / 1000u;
 }
 
 /******************************************************************************
@@ -2271,86 +2348,528 @@ void Swd_SetHwIdleClk(uint8_t idleCycles)
         }
     }
     SWD_IDLE_COUNT_PERIOD_REG = (hwIdleCycles * 2u) - 1u;
-    idleGuardPeriod = ((uint32_t)hwIdleCycles + 1u) * hwClockSwdPeriod / 1000u;
+    idleGuardPeriod = ((uint32_t)hwIdleCycles) * hwClockSwdPeriod / 1000u;
+}
+
+/*
+ * SwdHwRead(req, dst)
+ *
+ * Hardware-accelerated SWD read transfer (RnW must be set in req).
+ * dst must be a non-NULL uint32_t *.  Use SwdHwReadDiscard when the
+ * result is not needed.
+ * Returns the 3-bit ACK byte as uint8_t.
+ */
+static inline uint8_t SwdHwRead(uint32_t req, uint32_t *dst)
+{
+    SWD_PREAMBLE_WRITE_REG = hwPreamble[(uint16_t)req];
+    (void)SWD_STATUS_REG;
+    SWD_Control_Write(READ_OP | SKIP_OP);
+    do {} while (SWD_STATUS_REG == 0u);
+    *dst = (uint32_t)SWD_DATA_READ_REG;
+    uint8_t ack = (uint8_t)(GET_ACK(SWD_PREAMBLE_READ_REG));
+    SWD_Control_Write(NO_OP);
+    if (idleGuardPeriod > 0u)
+    {
+        CyDelayUs(idleGuardPeriod);
+    }
+    return ack;
+}
+
+/*
+ * SwdHwReadDiscard(req)
+ *
+ * Like SwdHwRead but reads and discards the data word (clears the FIFO
+ * without storing the result).  Use for AP posted-read priming.
+ */
+static inline uint8_t SwdHwReadDiscard(uint32_t req)
+{
+    SWD_PREAMBLE_WRITE_REG = hwPreamble[(uint16_t)req];
+    (void)SWD_STATUS_REG;
+    SWD_Control_Write(READ_OP | SKIP_OP);
+    do {} while (SWD_STATUS_REG == 0u);
+    (void)SWD_DATA_READ_REG;
+    uint8_t ack = (uint8_t)(GET_ACK(SWD_PREAMBLE_READ_REG));
+    SWD_Control_Write(NO_OP);
+    if (idleGuardPeriod > 0u)
+    {
+        CyDelayUs(idleGuardPeriod);
+    }
+    return ack;
+}
+
+/*
+ * SwdHwWrite(req, src)
+ *
+ * Hardware-accelerated SWD write transfer (RnW must be clear in req).
+ * Loads the preamble, loads *src into the data register, triggers WRITE_OP,
+ * and waits for the UDB to finish.
+ * Returns the 3-bit ACK byte as uint8_t.
+ */
+static inline uint8_t SwdHwWrite(uint32_t req, const uint32_t *src)
+{
+    SWD_PREAMBLE_WRITE_REG = hwPreamble[(uint16_t)req];
+    (void)SWD_STATUS_REG;
+    SWD_DATA_WRITE_REG = *src;
+    SWD_Control_Write(WRITE_OP | SKIP_OP);
+    do {} while (SWD_STATUS_REG == 0u);
+    uint8_t ack = (uint8_t)(GET_ACK(SWD_PREAMBLE_READ_REG));
+    SWD_Control_Write(NO_OP);
+    if (idleGuardPeriod > 0u)
+    {
+        CyDelayUs(idleGuardPeriod);
+    }
+    return ack;
 }
 
 /******************************************************************************
-*  Swd_TransferHw
+*  Swd_TransferHwImpl
 ***************************************************************************//**
-* Hardware accelerated SWD Transfer I/O
+* Hardware accelerated SWD Transfer I/O — dispatches to SwdHwRead or
+* SwdHwWrite based on the RnW bit in request.
 *
 * @param[in]  request Bit field of A[3:2] RnW APnDP
 * @param[in]  data    Pointer to Send/Receive 32 bit data word
 *
 * @return     ack     received from SWD slave ack
 ******************************************************************************/
-uint8_t Swd_TransferHw(uint32_t request, uint32_t *data)
+uint8_t Swd_TransferHwImpl(uint32_t request, uint32_t *data)
 {
-    static const uint8_t hwPreamble[16u] =
-    {
-        /* index is [A3 Bit, A2 Bit, RnW Bit, APnDP Bit] ==> Park Bit=1, Stop Bit=0, Parity Bit, A3 Bit, A2 Bit, RnW Bit, APnDP Bit, Start Bit=1 */
-        [0x0u] = HW_PREAMBLE(0x0u), /* A3=0,A2=0,RnW=0,APnDP=0 ==> 0b0000 ==> 0b10000001*/
-        [0x1u] = HW_PREAMBLE(0x1u), /* A3=0,A2=0,RnW=0,APnDP=1 ==> 0b0001 ==> 0b10100011*/
-        [0x2u] = HW_PREAMBLE(0x2u), /* A3=0,A2=0,RnW=1,APnDP=0 ==> 0b0010 ==> 0b10100101*/
-        [0x3u] = HW_PREAMBLE(0x3u), /* A3=0,A2=0,RnW=1,APnDP=1 ==> 0b0011 ==> 0b10000111*/
-        [0x4u] = HW_PREAMBLE(0x4u), /* A3=0,A2=1,RnW=0,APnDP=0 ==> 0b0100 ==> 0b10101001*/
-        [0x5u] = HW_PREAMBLE(0x5u), /* A3=0,A2=1,RnW=0,APnDP=1 ==> 0b0101 ==> 0b10001011*/
-        [0x6u] = HW_PREAMBLE(0x6u), /* A3=0,A2=1,RnW=1,APnDP=0 ==> 0b0110 ==> 0b10001101*/
-        [0x7u] = HW_PREAMBLE(0x7u), /* A3=0,A2=1,RnW=1,APnDP=1 ==> 0b0111 ==> 0b10101111*/
-        [0x8u] = HW_PREAMBLE(0x8u), /* A3=1,A2=0,RnW=0,APnDP=0 ==> 0b1000 ==> 0b10110001*/
-        [0x9u] = HW_PREAMBLE(0x9u), /* A3=1,A2=0,RnW=0,APnDP=1 ==> 0b1001 ==> 0b10010011*/
-        [0xAu] = HW_PREAMBLE(0xAu), /* A3=1,A2=0,RnW=1,APnDP=0 ==> 0b1010 ==> 0b10010101*/
-        [0xBu] = HW_PREAMBLE(0xBu), /* A3=1,A2=0,RnW=1,APnDP=1 ==> 0b1011 ==> 0b10110111*/
-        [0xCu] = HW_PREAMBLE(0xCu), /* A3=1,A2=1,RnW=0,APnDP=0 ==> 0b1100 ==> 0b10011001*/
-        [0xDu] = HW_PREAMBLE(0xDu), /* A3=1,A2=1,RnW=0,APnDP=1 ==> 0b1101 ==> 0b10111011*/
-        [0xEu] = HW_PREAMBLE(0xEu), /* A3=1,A2=1,RnW=1,APnDP=0 ==> 0b1110 ==> 0b10111101*/
-        [0xFu] = HW_PREAMBLE(0xFu)  /* A3=1,A2=1,RnW=1,APnDP=1 ==> 0b1111 ==> 0b10011111*/
-    };
-
-    uint8_t ack;
-    uint8_t status;
-    uint8_t preamble = hwPreamble[(uint8_t)(request & 0x0000000Fu)];
-
-    SWD_PREAMBLE_WRITE_REG = preamble;
-
-    (void)SWD_STATUS_REG; /* Clear any pending bit */
-
     if ((request & DAP_TRANSFER_RnW) != 0u)
     {
-        /* Read transaction */
-        SWD_Control_Write(READ_OP|SKIP_OP);
-
-        do
+        if (data != NULL)
         {
-            status = SWD_STATUS_REG;
-        } while (status == 0u);
-        *data = SWD_DATA_READ_REG;
+            return SwdHwRead(request, data);
+        }
+        return (uint8_t)SwdHwReadDiscard(request);
+    }
+    return SwdHwWrite(request, data);
+}
+
+/******************************************************************************
+ *  Swd_HwTransfer
+ ***************************************************************************/
+/**
+ * Hardware-accelerated implementation of the DAP_SWD_Transfer command loop.
+ * Handles the complete request/response framing for the HW path.
+ *
+ * @param[in]  request  Pointer to raw DAP request packet (DAP index byte first)
+ * @param[out] response Pointer to raw DAP response packet
+ *
+ * @return     Packed result: upper 16 bits = request bytes consumed,
+ *             lower 16 bits = response bytes produced
+ ******************************************************************************/
+uint32_t Swd_TransferHw(const uint8_t *request, uint8_t *response)
+{
+    uint32_t match_value;
+    uint32_t match_retry;
+    uint32_t retry;
+    uint32_t data;
+
+    const uint8_t *request_head = request;
+    uint32_t response_count = 0U;
+    uint32_t response_value = 0U;
+    uint8_t *response_head = response;
+
+    response += 2;
+
+    DAP_TransferAbort = 0U;
+    uint32_t post_read = 0U;
+    uint32_t check_write = 0U;
+
+    request++; // Ignore DAP index
+
+    /* SWD pins are already connected to DSI by DAP_SWD_Transfer before calling us. */
+
+    uint32_t request_value;
+    uint32_t request_count = *request++;
+    for (; request_count != 0U; request_count--)
+    {
+        request_value = *request++;
+        if ((request_value & DAP_TRANSFER_RnW) != 0U)
+        {
+            // Read register
+            if (post_read)
+            {
+                // Read was posted before
+                retry = DAP_Data.transfer.retry_count;
+                if ((request_value & (DAP_TRANSFER_APnDP | DAP_TRANSFER_MATCH_VALUE)) == DAP_TRANSFER_APnDP)
+                {
+                    // Read previous AP data and post next AP read
+                    do
+                    {
+                        response_value = SwdHwRead(request_value, &data);
+                    } while ((response_value == DAP_TRANSFER_WAIT) && retry-- && !DAP_TransferAbort);
+                }
+                else
+                {
+                    // Read previous AP data
+                    do
+                    {
+                        response_value = SwdHwRead(DP_RDBUFF | DAP_TRANSFER_RnW, &data);
+                    } while ((response_value == DAP_TRANSFER_WAIT) && retry-- && !DAP_TransferAbort);
+                    post_read = 0U;
+                }
+                if (response_value != DAP_TRANSFER_OK)
+                {
+                    break;
+                }
+                // Store previous AP data
+                response = store32(response, data);
+            }
+
+            if ((request_value & DAP_TRANSFER_MATCH_VALUE) != 0U)
+            {
+                // Read with value match
+                match_value = pack32(request);
+                request += 4U;
+                match_retry = DAP_Data.transfer.match_retry;
+                if ((request_value & DAP_TRANSFER_APnDP) != 0U)
+                {
+                    // Post AP read
+                    retry = DAP_Data.transfer.retry_count;
+                    do
+                    {
+                        response_value = SwdHwReadDiscard(request_value);
+                    } while ((response_value == DAP_TRANSFER_WAIT) && retry-- && !DAP_TransferAbort);
+                    if (response_value != DAP_TRANSFER_OK)
+                    {
+                        break;
+                    }
+                }
+                do
+                {
+                    // Read register until its value matches or retry counter expires
+                    retry = DAP_Data.transfer.retry_count;
+                    do
+                    {
+                        response_value = SwdHwRead(request_value, &data);
+                    } while ((response_value == DAP_TRANSFER_WAIT) && retry-- && !DAP_TransferAbort);
+                    if (response_value != DAP_TRANSFER_OK)
+                    {
+                        break;
+                    }
+                } while (((data & DAP_Data.transfer.match_mask) != match_value) && match_retry-- && !DAP_TransferAbort);
+                if ((data & DAP_Data.transfer.match_mask) != match_value)
+                {
+                    response_value |= DAP_TRANSFER_MISMATCH;
+                }
+                if (response_value != DAP_TRANSFER_OK)
+                {
+                    break;
+                }
+            }
+            else
+            {
+                // Normal read
+                retry = DAP_Data.transfer.retry_count;
+                if ((request_value & DAP_TRANSFER_APnDP) != 0U)
+                {
+                    // Read AP register
+                    if (post_read == 0U)
+                    {
+                        // Post AP read
+                        do
+                        {
+                            response_value = SwdHwReadDiscard(request_value);
+                        } while ((response_value == DAP_TRANSFER_WAIT) && retry-- && !DAP_TransferAbort);
+                        if (response_value != DAP_TRANSFER_OK)
+                        {
+                            break;
+                        }
+                        post_read = 1U;
+                    }
+                }
+                else
+                {
+                    // Read DP register
+                    do
+                    {
+                        response_value = SwdHwRead(request_value, &data);
+                    } while ((response_value == DAP_TRANSFER_WAIT) && retry-- && !DAP_TransferAbort);
+                    if (response_value != DAP_TRANSFER_OK)
+                    {
+                        break;
+                    }
+                    // Store data
+                    response = store32(response, data);
+                }
+            }
+            check_write = 0U;
+        }
+        else
+        {
+            // Write register
+            if (post_read)
+            {
+                // Read previous data
+                retry = DAP_Data.transfer.retry_count;
+                do
+                {
+                    response_value = SwdHwRead(DP_RDBUFF | DAP_TRANSFER_RnW, &data);
+                } while ((response_value == DAP_TRANSFER_WAIT) && retry-- && !DAP_TransferAbort);
+                if (response_value != DAP_TRANSFER_OK)
+                {
+                    break;
+                }
+                // Store previous data
+                response = store32(response, data);
+                post_read = 0U;
+            }
+            // Load data
+            data = pack32(request);
+            request += 4;
+            if ((request_value & DAP_TRANSFER_MATCH_MASK) != 0U)
+            {
+                // Write match mask
+                DAP_Data.transfer.match_mask = data;
+                response_value = DAP_TRANSFER_OK;
+            }
+            else
+            {
+                // Write DP/AP register
+                retry = DAP_Data.transfer.retry_count;
+                do
+                {
+                    response_value = SwdHwWrite(request_value, &data);
+                } while ((response_value == DAP_TRANSFER_WAIT) && retry-- && !DAP_TransferAbort);
+                if (response_value != DAP_TRANSFER_OK)
+                {
+                    break;
+                }
+                check_write = 1U;
+            }
+        }
+        response_count++;
+        if (DAP_TransferAbort)
+        {
+            break;
+        }
+    }
+
+    for (; request_count != 0U; request_count--)
+    {
+        // Process canceled requests
+        request_value = *request++;
+        if ((request_value & DAP_TRANSFER_RnW) != 0U)
+        {
+            // Read register
+            if ((request_value & DAP_TRANSFER_MATCH_VALUE) != 0U)
+            {
+                // Read with value match
+                request += 4U;
+            }
+        }
+        else
+        {
+            // Write register
+            request += 4U;
+        }
+    }
+
+    if (response_value == DAP_TRANSFER_OK)
+    {
+        if (post_read)
+        {
+            // Read previous data
+            retry = DAP_Data.transfer.retry_count;
+            do
+            {
+                response_value = SwdHwRead(DP_RDBUFF | DAP_TRANSFER_RnW, &data);
+            } while ((response_value == DAP_TRANSFER_WAIT) && retry-- && !DAP_TransferAbort);
+            if (response_value != DAP_TRANSFER_OK)
+            {
+                goto end;
+            }
+            // Store previous data
+            response = store32(response, data);
+        }
+        else
+        {
+            if (check_write)
+            {
+                // Check last write
+                retry = DAP_Data.transfer.retry_count;
+                do
+                {
+                    response_value = SwdHwReadDiscard(DP_RDBUFF | DAP_TRANSFER_RnW);
+                } while ((response_value == DAP_TRANSFER_WAIT) && retry-- && !DAP_TransferAbort);
+            }
+        }
+    }
+
+end:
+    *(response_head + 0U) = (uint8_t)response_count;
+    *(response_head + 1U) = (uint8_t)response_value;
+
+    return (((uint32_t)(request - request_head) << 16U) | (uint32_t)(response - response_head));
+}
+
+/******************************************************************************
+*  Swd_TransferBlockHw
+***************************************************************************//**
+* Hardware-accelerated implementation of the DAP_SWD_TransferBlock command.
+* Handles the complete request/response framing for the HW path.
+*
+* @param[in]  request  Pointer to raw DAP request packet (DAP index byte first)
+* @param[out] response Pointer to raw DAP response packet
+*
+* @return     Number of response bytes produced
+******************************************************************************/
+uint32_t Swd_TransferBlockHw(const uint8_t *request, uint8_t *response)
+{
+    uint32_t response_count = 0U;
+    uint32_t response_value = 0U;
+    uint8_t *response_head = response;
+    response += 3U;
+    DAP_TransferAbort = 0U;
+
+    request++; // Ignore DAP index
+
+    uint32_t request_count = (uint32_t)(*(request + 0) << 0U) |
+                             (uint32_t)(*(request + 1) << 8U);
+    request += 2U;
+    if (request_count == 0U)
+    {
+        goto end;
+    }
+    uint32_t request_value = *request++;
+
+    const uint32_t retry_count = DAP_Data.transfer.retry_count;
+    uint32_t dataArr[MAX_TRANSFERS_PER_REQ + 1u];
+    uint32_t remaining = request_count;
+    if ((request_value & DAP_TRANSFER_RnW) != 0U)
+    {
+        // Read register block
+        if ((request_value & DAP_TRANSFER_APnDP) != 0U)
+        {
+            /* AP read path requires posted read handling. */
+            while (remaining != 0u)
+            {
+                uint32_t chunk = (remaining > MAX_TRANSFERS_PER_REQ) ? MAX_TRANSFERS_PER_REQ : remaining;
+
+                // Post AP read for the first transfer in the block
+                response_value = SwdHwReadDiscard(request_value);
+                if (response_value != DAP_TRANSFER_OK)
+                {
+                    goto end;
+                }
+
+                // Read previous AP data and post next AP read for the rest of the transfers in the block
+                for (uint32_t i = 0u; i < (chunk - 1u); i++)
+                {
+                    uint32_t retry = retry_count;
+                    do
+                    {
+                        response_value = SwdHwRead(request_value, &dataArr[i]);
+                    } while ((response_value == DAP_TRANSFER_WAIT) && retry-- && !DAP_TransferAbort);
+                    if (response_value != DAP_TRANSFER_OK)
+                    {
+                        goto end;
+                    }
+                }
+
+                // Read last AP data without posting next read
+                uint32_t retry = retry_count;
+                do
+                {
+                    response_value = SwdHwRead(DP_RDBUFF | DAP_TRANSFER_RnW, &dataArr[chunk - 1u]);
+                } while ((response_value == DAP_TRANSFER_WAIT) && retry-- && !DAP_TransferAbort);
+                if (response_value != DAP_TRANSFER_OK)
+                {
+                    goto end;
+                }
+
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+                (void)memcpy(response, dataArr, chunk * sizeof(uint32_t)); response += chunk * sizeof(uint32_t);
+#else
+                for (uint32_t i = 0u; i < chunk; i++) { response = store32(response, dataArr[i]); }
+#endif
+
+                response_count += chunk;
+                remaining -= chunk;
+            }
+        }
+        else
+        {
+            /* DP read path: synchronous reads need no trailing RDBUFF — skip it. */
+            while (remaining != 0u)
+            {
+                uint32_t chunk = (remaining > MAX_TRANSFERS_PER_REQ) ? MAX_TRANSFERS_PER_REQ : remaining;
+
+                // Read DP data
+                for (uint32_t i = 0u; i < chunk; i++)
+                {
+                    uint32_t retry = retry_count;
+                    do
+                    {
+                        response_value = SwdHwRead(request_value, &dataArr[i]);
+                    } while ((response_value == DAP_TRANSFER_WAIT) && retry-- && !DAP_TransferAbort);
+                    if (response_value != DAP_TRANSFER_OK)
+                    {
+                        goto end;
+                    }
+                }
+
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+                (void)memcpy(response, dataArr, chunk * sizeof(uint32_t)); response += chunk * sizeof(uint32_t);
+#else
+                for (uint32_t i = 0u; i < chunk; i++) { response = store32(response, dataArr[i]); }
+#endif
+
+                response_count += chunk;
+                remaining -= chunk;
+            }
+        }
     }
     else
     {
-        /* Write transaction */
-        SWD_DATA_WRITE_REG = *data;
-
-        SWD_Control_Write(WRITE_OP|SKIP_OP);
-
-        do
+        while (remaining != 0u)
         {
-            status = SWD_STATUS_REG;
-        } while (status == 0u);
-    }
-    ack = (uint8_t)(GET_ACK(SWD_PREAMBLE_READ_REG));
-    SWD_Control_Write(NO_OP); /* Clear all */
+            uint32_t chunk = (remaining > MAX_TRANSFERS_PER_REQ) ? MAX_TRANSFERS_PER_REQ : remaining;
 
-    /* Delay for idle cycles */
-    if ( idleGuardPeriod > (uint32_t)UINT16_MAX )
-    {
-        CyDelay(idleGuardPeriod/1000u);
+            // Prepare data for write
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+            (void)memcpy(dataArr, request, chunk * sizeof(uint32_t)); request += chunk * sizeof(uint32_t);
+#else
+            for (uint32_t i = 0u; i < chunk; i++) { dataArr[i] = pack32(request); request += 4u; }
+#endif
+
+            // Write data
+            for (uint32_t i = 0u; i < chunk; i++)
+            {
+                uint32_t retry = retry_count;
+                do
+                {
+                    response_value = SwdHwWrite(request_value, &dataArr[i]);
+                } while ((response_value == DAP_TRANSFER_WAIT) && retry-- && !DAP_TransferAbort);
+                if (response_value != DAP_TRANSFER_OK)
+                {
+                    goto end;
+                }
+            }
+
+            // Read RDBUFF after the last write to ensure completion
+            uint32_t retry = retry_count;
+            do
+            {
+                response_value = SwdHwRead(DP_RDBUFF | DAP_TRANSFER_RnW, &dataArr[chunk]);
+            } while ((response_value == DAP_TRANSFER_WAIT) && retry-- && !DAP_TransferAbort);
+            if (response_value != DAP_TRANSFER_OK)
+            {
+                goto end;
+            }
+
+            response_count += chunk;
+            remaining -= chunk;
+        }
     }
-    else
-    {
-        CyDelayUs((uint16_t)idleGuardPeriod);
-    }
-    return ack;
+
+end:
+    *(response_head+0) = (uint8_t)(response_count >> 0U);
+    *(response_head+1) = (uint8_t)(response_count >> 8U);
+    *(response_head+2) = (uint8_t) response_value;
+
+    return ((uint32_t)(response - response_head));
 }
 
 /******************************************************************************
@@ -2436,7 +2955,6 @@ void Swd_Init (void)
 
     SWD_Control_Write(NO_OP);
     (void)SWD_STATUS_REG; /* Clear any pending bit */
-
 }
 
 /******************************************************************************

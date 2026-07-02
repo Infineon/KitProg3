@@ -54,7 +54,7 @@
 
 
 #define VER_MAJOR                        (2u)
-#define VER_MINOR                        (81u)
+#define VER_MINOR                        (82u)
 
 /*****************************************************************************
 * Data Structure Definition

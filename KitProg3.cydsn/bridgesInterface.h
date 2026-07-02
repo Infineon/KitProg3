@@ -331,6 +331,9 @@ typedef struct {
 #define TRANSITION_LOW_HIGH       (0x01u)
 #define TRANSITION_HIGH_LOW       (0x02u)
 
+/* Bridge interface state */
+extern volatile bool bridgeOff;
+
 /* Function prototypes */
 void Bridge_InterfaceHandler(void);
 void Bridge_UartInterfaceHandler(void);
@@ -351,6 +354,7 @@ uint32_t Bridge_GpioSetMode(const uint8_t * request, uint8_t *response);
 uint32_t Bridge_GpioSetState(const uint8_t * request, uint8_t *response);
 uint32_t Bridge_GpioReadState(const uint8_t * request, uint8_t *response);
 uint32_t Bridge_GpioStateChanged(const uint8_t * request, uint8_t *response);
+uint32_t Bridge_OnOff(const uint8_t *request, uint8_t *response);
 
 #define isr_SWDXRES_INTERRUPT_INTERRUPT_CALLBACK
 void isr_SWDXRES_Interrupt_InterruptCallback(void);

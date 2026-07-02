@@ -78,6 +78,8 @@ bool usbDapReadFlag = false; /* This global variable is set in USBFS_episr.c to 
 volatile uint8_t currentFirstUartControl;
 volatile uint8_t currentSecondUartControl;
 volatile uint8_t currentFirstUartMode;
+volatile bool bridgeOff = false; /* Bridge is enabled by default; host must explicitly disable via cmd 0x94 */
+
 /*******************************************************************************
 * main
 ********************************************************************************
@@ -395,14 +397,17 @@ int main(void)
 
                 usbd_bulk_process();
 
-                /* Handle I2C/SPI Bridge requests */
-                if (currentMode != MODE_BULK2UARTS)
+                if (!bridgeOff)
                 {
-                    Bridge_InterfaceHandler();
-                }
+                    /* Handle I2C/SPI Bridge requests */
+                    if (currentMode != MODE_BULK2UARTS)
+                    {
+                        Bridge_InterfaceHandler();
+                    }
 
-                /* Handle USB-UART data */
-                Bridge_UartInterfaceHandler();
+                    /* Handle USB-UART data */
+                    Bridge_UartInterfaceHandler();
+                }
 
                 /* Handle USB configurations change */
                 /* If the host has send an new configuration, exit state machine to get reconfigured. */
@@ -453,11 +458,14 @@ int main(void)
                     }
                 }
 
-                /* Handle I2C/SPI Bridge requests */
-                Bridge_InterfaceHandler();
+                if (!bridgeOff)
+                {                
+                    /* Handle I2C/SPI Bridge requests */
+                    Bridge_InterfaceHandler();
 
-                /* Handle USB-UART data */
-                Bridge_UartInterfaceHandler();
+                    /* Handle USB-UART data */
+                    Bridge_UartInterfaceHandler();
+                }
 
                 /* Handle USB configurations change */
                 bool cachedUsbResetDetected = usbResetDetected;
@@ -471,7 +479,7 @@ int main(void)
                 if(USBFS_VBusPresent() == 0u)
                 {
                     Led_SetState(LED_ALL_OFF);
-                    /* turn off SMSIS-DAP port */
+                    /* turn off CMSIS-DAP port */
                     PORT_OFF();
                     currState = USB_HALT;
                 }
