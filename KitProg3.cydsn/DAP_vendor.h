@@ -55,9 +55,9 @@
 #include "swd.h"
 
 
-#define KHPI_VER                            "2.06"
+#define KHPI_VER                            "2.08"
 #define KHPI_VER_MAJOR                      (2u)
-#define KHPI_VER_MINOR                      (6u)
+#define KHPI_VER_MINOR                      (8u)
 
 #define CMD_STAT_SUCCESS                    (0x00u)
 #define CMD_STAT_WAIT                       (0x01u)
@@ -124,6 +124,9 @@
 #define CMD_POWER_OFF                       (0x00u)
 #define CMD_POWER_ON                        (0x01u)
 #define CMD_POWER_VOLT_SET                  (0x02u)
+
+/* Reported in the V16R_VOLTAGES byte, whose bits 0..3 carry the supported voltages */
+#define EEPROM_INFO_AVAILIBILITY_MASK       (0x80u)
 
 #define PROB_CAP_RESP_LEN                   (15u)
 

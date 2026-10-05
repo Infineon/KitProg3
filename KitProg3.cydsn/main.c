@@ -129,6 +129,12 @@ int main(void)
 
     Bridge_PrepareI2cInterface();
 
+    /* If kit supports EEPROM info, read the target identification EEPROM before I2C bridging becomes available. */
+    if (KitSupportsEepromInfo())
+    {
+        (void)Bridge_EepromDetect();
+    }
+
     if (KitHasSpiBridge())
     {
         Bridge_PrepareSpiInterface();

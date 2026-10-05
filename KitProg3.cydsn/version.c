@@ -4,7 +4,7 @@
 * @brief
 *  This file provides the source code to handle version information.
 *
-* @version KitProg3 v2.80
+* @version KitProg3 v2.90
 */
 /*
 * Related Documents:
@@ -54,7 +54,7 @@
 
 
 #define VER_MAJOR                        (2u)
-#define VER_MINOR                        (82u)
+#define VER_MINOR                        (90u)
 
 /*****************************************************************************
 * Data Structure Definition
@@ -456,6 +456,19 @@ uint8_t GetKitSupportedVoltages(void)
 bool KitSupportsHciPeriUart(void)
 {
     return kitprogConfiguration[kitProgHwId].kitHasHciPeripheralUarts;
+}
+
+/******************************************************************************
+*  KitSupportsEepromInfo
+***************************************************************************//**
+* Check if kit supports EEPROM Target Info Identification.
+*
+* @return if kit supports EEPROM Target Info Identification.
+*
+******************************************************************************/
+bool KitSupportsEepromInfo(void)
+{
+    return kitprogConfiguration[kitProgHwId].kitSupportsEepromInfo;
 }
 
 /******************************************************************************

@@ -103,6 +103,7 @@ typedef struct
     uint8_t kitSupportedGpioPins;       /**< Bitmask of supported GPIO pins */
     uint8_t kitSupportedVoltages;       /**< Bitmask of supported target voltages */
     bool kitHasHciPeripheralUarts;      /**< Kit supports HCI and Peripheral UARTs */
+    bool kitSupportsEepromInfo;         /**< Kit supports EEPROM Target Info Identification */
 } kitprog_properties_t;
 
 /*****************************************************************************
@@ -361,6 +362,17 @@ bool KitSuportsJtag(void);
 *
 ******************************************************************************/
 bool KitSupportsHciPeriUart(void);
+
+
+/******************************************************************************
+*  KitSupportsEepromInfo
+***************************************************************************//**
+* Check if kit supports EEPROM Target Info Identification.
+*
+* @return  True if kit supports EEPROM Target Info Identification.
+*
+******************************************************************************/
+bool KitSupportsEepromInfo(void);
 
 
 /******************************************************************************

@@ -5,7 +5,7 @@
 *  This file contains data that encodes the capabilities of the kit based on
 *  the kit hardware identifier (HWID).
 *
-* File Version : 1.0.140
+* File Version : 1.0.146
 */
 /*
 * Related Documents:
@@ -15,7 +15,7 @@
 *
 *
 ******************************************************************************
-* (c) (2018-2025), Cypress Semiconductor Corporation (an Infineon company)
+* (c) (2018-2026), Cypress Semiconductor Corporation (an Infineon company)
 * or an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, associated documentation and materials ("Software") is
@@ -72,6 +72,7 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasUartIndicator = false,
         .kitSupportedVoltages = V1_8_SUPPORT_MASK | V2_5_SUPPORT_MASK | V3_3_SUPPORT_MASK | V5_0_SUPPORT_MASK,
         .kitHasHciPeripheralUarts = false,
+        .kitSupportsEepromInfo = false,
     },
     [2u] = /* HWID is 0x02u */
     {
@@ -93,6 +94,7 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasUartIndicator = false,
         .kitSupportedVoltages = V1_8_SUPPORT_MASK | V2_5_SUPPORT_MASK | V3_3_SUPPORT_MASK,
         .kitHasHciPeripheralUarts = false,
+        .kitSupportsEepromInfo = false,
     },
     [3u] = /* HWID is 0x03u */
     {
@@ -114,6 +116,7 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasUartIndicator = false,
         .kitSupportedVoltages = V_NO_SUPPORT_MASK,
         .kitHasHciPeripheralUarts = false,
+        .kitSupportsEepromInfo = false,
     },
     [5u] = /* HWID is 0x05u */
     {
@@ -135,6 +138,7 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasUartIndicator = false,
         .kitSupportedVoltages = V1_8_SUPPORT_MASK | V2_5_SUPPORT_MASK | V3_3_SUPPORT_MASK | V5_0_SUPPORT_MASK,
         .kitHasHciPeripheralUarts = false,
+        .kitSupportsEepromInfo = false,
     },
     [6u] = /* HWID is 0x06u */
     {
@@ -156,6 +160,7 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasUartIndicator = false,
         .kitSupportedVoltages = V_NO_SUPPORT_MASK,
         .kitHasHciPeripheralUarts = false,
+        .kitSupportsEepromInfo = false,
     },
     [7u] = /* HWID is 0x07u */
     {
@@ -177,6 +182,7 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasUartIndicator = false,
         .kitSupportedVoltages = V1_8_SUPPORT_MASK | V2_5_SUPPORT_MASK | V3_3_SUPPORT_MASK,
         .kitHasHciPeripheralUarts = false,
+        .kitSupportsEepromInfo = false,
     },
     [8u] = /* HWID is 0x08u */
     {
@@ -198,6 +204,7 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasUartIndicator = false,
         .kitSupportedVoltages = V_NO_SUPPORT_MASK,
         .kitHasHciPeripheralUarts = false,
+        .kitSupportsEepromInfo = false,
     },
     [9u] = /* HWID is 0x09u */
     {
@@ -219,6 +226,7 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasUartIndicator = false,
         .kitSupportedVoltages = V_NO_SUPPORT_MASK,
         .kitHasHciPeripheralUarts = false,
+        .kitSupportsEepromInfo = false,
     },
     [10u] = /* HWID is 0x0Au */
     {
@@ -240,6 +248,7 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasUartIndicator = false,
         .kitSupportedVoltages = V1_8_SUPPORT_MASK | V2_5_SUPPORT_MASK | V3_3_SUPPORT_MASK | V5_0_SUPPORT_MASK,
         .kitHasHciPeripheralUarts = false,
+        .kitSupportsEepromInfo = false,
     },
     [11u] = /* HWID is 0x0Bu */
     {
@@ -261,6 +270,7 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasUartIndicator = false,
         .kitSupportedVoltages = V_NO_SUPPORT_MASK,
         .kitHasHciPeripheralUarts = false,
+        .kitSupportsEepromInfo = false,
     },
     [12u] = /* HWID is 0x0Cu */
     {
@@ -282,6 +292,7 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasUartIndicator = true,
         .kitSupportedVoltages = V_NO_SUPPORT_MASK,
         .kitHasHciPeripheralUarts = true,
+        .kitSupportsEepromInfo = false,
     },
     [13u] = /* HWID is 0x0Du */
     {
@@ -303,6 +314,7 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasUartIndicator = false,
         .kitSupportedVoltages = V_NO_SUPPORT_MASK,
         .kitHasHciPeripheralUarts = false,
+        .kitSupportsEepromInfo = false,
     },
     [14u] = /* HWID is 0x0Eu */
     {
@@ -324,6 +336,7 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasUartIndicator = false,
         .kitSupportedVoltages = V_NO_SUPPORT_MASK,
         .kitHasHciPeripheralUarts = false,
+        .kitSupportsEepromInfo = false,
     },
     [15u] = /* HWID is 0x0Fu */
     {
@@ -345,6 +358,7 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasUartIndicator = false,
         .kitSupportedVoltages = V_NO_SUPPORT_MASK,
         .kitHasHciPeripheralUarts = true,
+        .kitSupportsEepromInfo = false,
     },
     [17u] = /* HWID is 0x11u */
     {
@@ -366,6 +380,29 @@ const kitprog_properties_t kitprogConfiguration[MAX_SUPPORTED_HWID+1] =
         .kitHasUartIndicator = false,
         .kitSupportedVoltages = V_NO_SUPPORT_MASK,
         .kitHasHciPeripheralUarts = false,
+        .kitSupportsEepromInfo = false,
+    },
+    [18u] = /* HWID is 0x12u */
+    {
+        .kitHasVoltMeasure = true,
+        .kitHasPowerControl = false,
+        .kitHasThreeLeds = false,
+        .kitHasTwoButtons = false,
+        .kitHasSecondaryUart = true,
+        .kitHasUartHwFlowControl = true,
+        .kitHasSpecialRts = true,
+        .kitHasI2cBridge = true,
+        .kitHasSpiBridge = false,
+        .kitHasGpioBridge = false,
+        .kitIsMiniProg = false,
+        .kitHasPowerCycleProg = false,
+        .kitProtocolSupport = JTAG_PROTOCOL_SUPPORT_MASK | SWD_PROTOCOL_SUPPORT_MASK,
+        .kitSupportedSpiSlaveSelect = NO_SS_SUPPORT_MASK,
+        .kitSupportedGpioPins = NO_GPIO_PINS_SUPPORT_MASK,
+        .kitHasUartIndicator = false,
+        .kitSupportedVoltages = V_NO_SUPPORT_MASK,
+        .kitHasHciPeripheralUarts = false,
+        .kitSupportsEepromInfo = true,
     }
 };
 

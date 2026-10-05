@@ -91,6 +91,26 @@ static uint16_t waitResponseTimer = 0u;
 
 static uint8_t bufferI2c[64u];
 
+/* Cached identification record. It is produced once during start-up by
+ * Bridge_EepromDetect() and reported later by GetExtendedInfo(), so it cannot
+ * live on the stack. Every field other than result is meaningless unless result
+ * is EEPROM_SCAN_OK; result is assigned last so a half filled record is never
+ * reported as usable. */
+typedef struct
+{
+    uint8_t  result;
+    uint8_t  slaveAddress;
+    uint16_t dataSize;
+    uint8_t  data[EEPROM_MAX_DATA_SIZE];
+} eeprom_record_t;
+
+static eeprom_record_t eepromRecord =
+{
+    .result = EEPROM_SCAN_NO_DEVICE,
+    .slaveAddress = EEPROM_SLAVE_ADDR_INVALID,
+    .dataSize = 0u,
+};
+
 /* Half-Duplex echo suppression: size of last transmitted packet to suppress (0 = no suppression) */
 static uint16_t uartEchoSuppressSize = 0u;
 
@@ -286,6 +306,379 @@ static bool I2c_Restart(void)
     I2C_UDB_Start();
 
     return (status);
+}
+
+/******************************************************************************
+*  I2c_WaitTransferDone
+***************************************************************************//**
+* Polls the I2C master until the ongoing transaction completes, fails or the
+* timeout expires. The EEPROM access runs to completion instead of going through
+* the interrupt driven bridge command state machine.
+*
+* @return True, if the transaction completed without errors.
+*
+*******************************************************************************/
+static bool I2c_WaitTransferDone(void)
+{
+    const uint8_t cmpltMask = (uint8_t)(I2C_UDB_MSTAT_RD_CMPLT | I2C_UDB_MSTAT_WR_CMPLT);
+    const uint8_t doneMask = (uint8_t)(cmpltMask | I2C_UDB_MSTAT_ERR_MASK);
+    uint16_t startTimerVal = Timer_CSTick_ReadCounter();
+    uint8_t status = I2C_UDB_MasterStatus();
+
+    /* Timer is down counting, that is why old minus new value is correct interval */
+    while (((status & doneMask) == 0u) &&
+           (((uint16_t)(startTimerVal - Timer_CSTick_ReadCounter())) <= EEPROM_XFER_TIMEOUT_TICKS))
+    {
+        /* Poll until the master reports completion or an error */
+        status = I2C_UDB_MasterStatus();
+    }
+
+    /* A timed out transfer leaves both completion bits clear, so it is reported as a failure */
+    return (((status & cmpltMask) != 0u) && ((status & I2C_UDB_MSTAT_ERR_MASK) == 0u));
+}
+
+/******************************************************************************
+*  EepromRead
+***************************************************************************//**
+* Reads a block from the EEPROM memory array. An absent or mismatching slave
+* NAKs its address, which the I2C master reports as a transaction error.
+*
+* @param[in]  slaveAddress  7-bit address to address the EEPROM with.
+* @param[in]  offset        Word address to start reading from.
+* @param[out] data          Buffer for the requested amount of bytes.
+* @param[in]  length        Number of bytes to read, at most 255.
+* @param[out] addressAcked  Set when the device acknowledged its address byte.
+*                           May be NULL when the caller does not need it.
+*
+* @return True if the requested amount of bytes was read, false otherwise.
+*
+*******************************************************************************/
+static bool EepromRead(uint8_t slaveAddress, uint16_t offset, uint8_t *data, uint8_t length,
+                       bool *addressAcked)
+{
+    /* Bit 7 of the first word address byte selects the configuration registers. */
+    uint8_t wordAddress[EEPROM_WORD_ADDR_SIZE] = {(uint8_t)((offset >> 8u) & 0x7Fu),
+                                                  (uint8_t)(offset & 0xFFu)};
+    bool result = false;
+
+    if (addressAcked != NULL)
+    {
+        *addressAcked = false;
+    }
+
+    /* Drop the status history left by the previous transaction */
+    (void)I2C_UDB_MasterClearStatus();
+
+    /* Two separate transactions rather than the datasheet's ReStart form: setting
+     * the word address with a Stop leaves no write cycle pending (no data bytes)
+     * and the device keeps the address pointer, so the following read starts at
+     * the requested offset. Verified on hardware; the ReStart variant did not. */
+    if (I2C_UDB_MasterWriteBuf(slaveAddress, wordAddress, (uint8_t)sizeof(wordAddress),
+                               I2C_UDB_MODE_COMPLETE_XFER) == I2C_UDB_MSTR_NO_ERROR)
+    {
+        /* The word address was accepted, so a device does live at this address */
+        if (I2c_WaitTransferDone())
+        {
+            /* Recorded before the read, an unreadable device still counts as present */
+            if (addressAcked != NULL)
+            {
+                *addressAcked = true;
+            }
+            (void)I2C_UDB_MasterClearStatus();
+
+            /* Read back from the address pointer set above */
+            if (I2C_UDB_MasterReadBuf(slaveAddress, data, length,
+                                      I2C_UDB_MODE_COMPLETE_XFER) == I2C_UDB_MSTR_NO_ERROR)
+            {
+                /* A short read is discarded, the caller cannot use a partial block.
+                 * The acknowledge is still reported, so the host can tell a device that
+                 * answered but could not be read from an address that stayed silent. */
+                result = I2c_WaitTransferDone() && (I2C_UDB_MasterGetReadBufSize() == length);
+            }
+        }
+    }
+
+    if (!result)
+    {
+        /* The bus may be left busy after a NAKed or timed out transfer, free it
+         * so that the next probe and the I2C bridging start from a clean state. */
+        (void)I2c_Restart();
+    }
+
+    (void)I2C_UDB_MasterClearStatus();
+
+    /* The component keeps the caller's buffer, which lives on the stack here. */
+    I2C_UDB_mstrWrBufPtr = NULL;
+    I2C_UDB_mstrRdBufPtr = NULL;
+
+    return (result);
+}
+
+/******************************************************************************
+*  EepromReadPayload
+***************************************************************************//**
+* Reads the payload that follows the header into the cache. The transfer is
+* split so that every chunk fits the component's 8-bit byte counter.
+*
+* @param[in] slaveAddress  7-bit address of the identification EEPROM.
+* @param[in] dataSize      Number of payload bytes to read.
+*
+* @return True if the whole payload was read, false otherwise.
+*
+*******************************************************************************/
+static bool EepromReadPayload(uint8_t slaveAddress, uint16_t dataSize)
+{
+    bool result = false;
+
+    /* An oversized record is refused rather than truncated */
+    if (dataSize <= EEPROM_MAX_DATA_SIZE)
+    {
+        /* Wider than the data it holds so that advancing it needs no narrowing cast,
+         * which is what Coverity INTEGER_OVERFLOW flags when the result indexes data[] */
+        uint32_t offset = 0u;
+
+        result = true;
+
+        /* Stop at the first failed chunk, a partial cache is not usable */
+        while ((offset < dataSize) && result)
+        {
+            uint32_t remaining = (uint32_t)dataSize - offset;
+            uint32_t chunk = (remaining > EEPROM_READ_CHUNK_SIZE) ? EEPROM_READ_CHUNK_SIZE :
+                                                                    remaining;
+
+            result = EepromRead(slaveAddress, (uint16_t)(EEPROM_HEADER_SIZE + offset),
+                                &eepromRecord.data[offset], (uint8_t)chunk, NULL);
+            offset += chunk;
+        }
+    }
+
+    return (result);
+}
+
+/******************************************************************************
+*  Bridge_EepromDetect
+***************************************************************************//**
+* Looks for the SOM module identification EEPROM by reading the header from
+* every address the part can respond to and matching the magic key. On a match
+* the payload named by the header size field is read into the cache. Called once
+* during start-up, so the record is left at its initial values until then. The
+* caller checks that the kit supports the feature.
+*
+* @return One of the EEPROM_SCAN_* codes, also cached in eepromRecord.result.
+*
+*******************************************************************************/
+uint8_t Bridge_EepromDetect(void)
+{
+    /* Marks the start of a valid SOM module identification record. */
+    static const uint8_t eepromMagicKey[EEPROM_KEY_SIZE] =
+        {(uint8_t)'S', (uint8_t)'O', (uint8_t)'M', (uint8_t)'_',
+         (uint8_t)'I', (uint8_t)'N', (uint8_t)'F', (uint8_t)'O'};
+    uint8_t header[EEPROM_HEADER_SIZE];
+    bool found = false;
+
+    /* The device type identifier is fixed, so the EEPROM can only sit on these eight
+     * addresses. Only one is expected, so the scan stops at the first match. */
+    for (uint8_t index = 0u; (index < EEPROM_SLAVE_ADDR_COUNT) && !found; index++)
+    {
+        const uint8_t address = (uint8_t)(EEPROM_SLAVE_ADDR_BASE + index);
+        bool addressAcked = false;
+
+        if (EepromRead(address, EEPROM_HEADER_OFFSET, header, EEPROM_HEADER_SIZE, &addressAcked))
+        {
+            /* Only the magic key confirms that this device is the identification EEPROM */
+            if (memcmp(header, eepromMagicKey, EEPROM_KEY_SIZE) == 0)
+            {
+                /* Size field is big endian, as written by the SOM programming tool. */
+                uint16_t dataSize = (uint16_t)(((uint16_t)header[EEPROM_KEY_SIZE] << 8u) |
+                                               (uint16_t)header[EEPROM_KEY_SIZE + 1u]);
+
+                /* The device is identified even when its payload cannot be used, so the
+                 * scan stops here and the reason says what went wrong. */
+                found = true;
+                eepromRecord.slaveAddress = address;
+
+                /* Too large to cache, do not serve a truncated record */
+                if (dataSize > EEPROM_MAX_DATA_SIZE)
+                {
+                    eepromRecord.result = EEPROM_SCAN_DATA_TOO_LARGE;
+                }
+                /* A key with no payload behind it is not a usable record */
+                else if (dataSize == 0u)
+                {
+                    eepromRecord.result = EEPROM_SCAN_DATA_EMPTY;
+                }
+                else if (!EepromReadPayload(address, dataSize))
+                {
+                    eepromRecord.result = EEPROM_SCAN_DATA_FAILED;
+                }
+                else
+                {
+                    eepromRecord.dataSize = dataSize;
+                    eepromRecord.result = EEPROM_SCAN_OK;
+                }
+            }
+            else
+            {
+                /* Readable but wrong content is more specific than anything seen so far */
+                eepromRecord.result = EEPROM_SCAN_KEY_MISMATCH;
+            }
+        }
+        else if (addressAcked)
+        {
+            /* Answered its address but the header did not come back in full. Do not
+             * overwrite a mismatch already found at another address. */
+            if (eepromRecord.result == EEPROM_SCAN_NO_DEVICE)
+            {
+                eepromRecord.result = EEPROM_SCAN_READ_FAILED;
+            }
+        }
+        else
+        {
+            /* Nothing at this address */
+        }
+    }
+
+    return (eepromRecord.result);
+}
+
+/******************************************************************************
+*  SendPacket
+***************************************************************************//**
+* Sends one packet on the IN endpoint of the active CMSIS-DAP interface and
+* waits for the host to collect it, following WaitVendorResponse().
+*
+* @param[in] packet  Packet of DAP_PACKET_SIZE bytes to send.
+*
+*******************************************************************************/
+static void SendPacket(const uint8_t *packet)
+{
+    uint8_t cachedCurrentMode = currentMode;
+    uint8_t endpoint;
+
+    if ((cachedCurrentMode == MODE_BULK) || (cachedCurrentMode == MODE_BULK2UARTS))
+    {
+        endpoint = CMSIS_BULK_IN_EP;
+        /* Mark USB busy, flag is cleared in the USB EP ISR */
+        USB_ResponseIdle = false;
+    }
+    else if (cachedCurrentMode == MODE_HID)
+    {
+        endpoint = CMSIS_HID_IN_EP;
+    }
+    else
+    {
+        /* Only two modes are possible for the CMSIS-DAP interface */
+        return;
+    }
+
+    while (USBFS_IN_BUFFER_EMPTY != USBFS_GetEPState(endpoint))
+    {
+        /* Wait for the data to be received by the host */
+    }
+
+    uint32_t intrMask = CyUsbIntDisable();
+    USBFS_LoadInEP(endpoint, packet, DAP_PACKET_SIZE);
+    CyUsbIntEnable(intrMask);
+
+    while (USBFS_IN_BUFFER_EMPTY != USBFS_GetEPState(endpoint))
+    {
+        /* Wait for the data to be received by the host */
+    }
+}
+
+/******************************************************************************
+*  EepromSendData
+***************************************************************************//**
+* Streams the cached payload to the host. All but the last packet are sent from
+* here; the last one is returned through the normal response path so that it is
+* sized for the active interface. The payload is cached during detection, so
+* this does not touch the I2C bus.
+*
+* @param[out] response  Buffer for the final packet.
+*
+* @return Size of the final packet.
+*
+*******************************************************************************/
+static uint32_t EepromSendData(uint8_t *response)
+{
+    uint8_t packet[DAP_PACKET_SIZE];
+    uint16_t offset = 0u;
+    uint8_t lastLength;
+    uint8_t packetsLeft;
+
+    /* Detection rejects an empty record, so there is always at least one packet */
+    packetsLeft = (uint8_t)((eepromRecord.dataSize + (EEPROM_INFO_PKT_DATA_SIZE - 1u)) /
+                            EEPROM_INFO_PKT_DATA_SIZE);
+
+    /* The last packet goes back through the caller, so stop one short */
+    while (packetsLeft > 1u)
+    {
+        packetsLeft--;
+
+        (void)memset(packet, 0, sizeof(packet));
+        packet[GENERAL_RESPONSE_COMMAND] = ID_DAP_Vendor21;
+        packet[GENERAL_RESPONSE_STATUS] = CMD_STAT_SUCCESS;
+        packet[EEPROM_INFO_PKT_REASON] = eepromRecord.result;
+        packet[EEPROM_INFO_PKT_ADDRESS] = eepromRecord.slaveAddress;
+        packet[EEPROM_INFO_PKT_LEFT] = packetsLeft;
+        packet[EEPROM_INFO_PKT_LENGTH] = (uint8_t)EEPROM_INFO_PKT_DATA_SIZE;
+        (void)memcpy(&packet[EEPROM_INFO_PKT_DATA], &eepromRecord.data[offset],
+                     EEPROM_INFO_PKT_DATA_SIZE);
+
+        SendPacket(packet);
+        offset = (uint16_t)(offset + EEPROM_INFO_PKT_DATA_SIZE);
+    }
+
+    /* The loop leaves at most one packet worth of payload, so this fits a uint8 */
+    lastLength = (uint8_t)(eepromRecord.dataSize - offset);
+
+    response[GENERAL_RESPONSE_STATUS] = CMD_STAT_SUCCESS;
+    response[EEPROM_INFO_PKT_REASON] = eepromRecord.result;
+    response[EEPROM_INFO_PKT_ADDRESS] = eepromRecord.slaveAddress;
+    response[EEPROM_INFO_PKT_LEFT] = 0u;
+    response[EEPROM_INFO_PKT_LENGTH] = lastLength;
+    if (lastLength != 0u)
+    {
+        (void)memcpy(&response[EEPROM_INFO_PKT_DATA], &eepromRecord.data[offset], lastLength);
+    }
+
+    return ((uint32_t)EEPROM_INFO_PKT_HDR_LEN + (uint32_t)lastLength);
+}
+
+/******************************************************************************
+*  GetExtendedInfo
+***************************************************************************//**
+* Streams the record cached from the identification EEPROM during start-up.
+* The payload is already in RAM, so this does not touch the I2C bus and cannot
+* disturb an active bridge transaction.
+*
+* @param[in] request The pointer to the request string.
+*
+* @param[out] response The pointer to the memory that will be used for storing
+*   the response.
+*
+* @return Size of the response packet.
+*
+*******************************************************************************/
+uint32_t GetExtendedInfo(const uint8_t *request, uint8_t *response)
+{
+    uint32_t num;
+
+    (void)request;
+
+    if (eepromRecord.result == EEPROM_SCAN_OK)
+    {
+        num = EepromSendData(response);
+    }
+    else
+    {
+        response[GENERAL_RESPONSE_STATUS] = CMD_STAT_FAIL_OP_FAIL;
+        response[EEPROM_INFO_PKT_REASON] = eepromRecord.result;
+        response[EEPROM_INFO_PKT_ADDRESS] = eepromRecord.slaveAddress;
+        num = (uint32_t)EEPROM_INFO_FAIL_LEN;
+    }
+
+    return (num);
 }
 
 /******************************************************************************

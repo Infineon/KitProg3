@@ -272,6 +272,18 @@ uint32_t DAP_ProcessVendorCommand(const uint8_t *request, uint8_t *response) {
             /* Command 0x94 */
             num = Bridge_OnOff(request, response);
             break;
+        case ID_DAP_Vendor21:
+            /* Command 0x95 */
+            if (KitHasI2cBridge() && KitSupportsEepromInfo())
+            {
+                num = ((1UL << 16) | GetExtendedInfo(request, response));
+            }
+            else
+            {
+                response[GENERAL_RESPONSE_COMMAND] = ID_DAP_Invalid;
+                num = ID_DAP_DEF_CASE_RESP_LEN;
+            }
+            break;
         default:
         {
             /* Move response pointer back to byte 0 */
@@ -608,7 +620,8 @@ uint32_t GetCapabilities(const uint8_t *request, uint8_t *response)
     response[V16R_MAX_SPI_BYTE3] = LO8(HI16(SOURCECLK_IMO/SPI_COMP_DIVIDER/SPI_DIVIDER_MIN));
     response[V16R_MAX_SPI_BYTE4] = HI8(HI16(SOURCECLK_IMO/SPI_COMP_DIVIDER/SPI_DIVIDER_MIN));
     response[V16R_SPI_SS] = GetKitSupportedSpiSs();
-    response[V16R_VOLTAGES] = GetKitSupportedVoltages();
+    response[V16R_VOLTAGES] = GetKitSupportedVoltages() |
+                              (KitSupportsEepromInfo() ? EEPROM_INFO_AVAILIBILITY_MASK : 0x00u);
     num = PROB_CAP_RESP_LEN;
 
     return (num);

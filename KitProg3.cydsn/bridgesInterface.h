@@ -134,6 +134,55 @@
 #define I2C_LINE_STAB_1_TIMEOUT         (0x25u)
 #define I2C_LINE_STAB_2_TIMEOUT         (0x50u)
 
+/* SOM module identification EEPROM (Microchip 24CW16X family).
+ * Its device address byte is fixed to 1010b|A2|A1|A0|R_nW, so the whole 7-bit
+ * address space the part can be ordered/configured for is 0x50..0x57. */
+#define EEPROM_SLAVE_ADDR_BASE          (0x50u)
+#define EEPROM_SLAVE_ADDR_COUNT         (8u)
+#define EEPROM_SLAVE_ADDR_INVALID       (0xFFu)
+
+/* Two word address bytes are always required; bit 7 of the first one must be 0
+ * to address the memory array instead of the configuration registers. */
+#define EEPROM_WORD_ADDR_SIZE           (2u)
+
+/* Header layout: 8-byte magic key followed by the 2-byte payload size. */
+#define EEPROM_HEADER_OFFSET            (0u)
+#define EEPROM_KEY_SIZE                 (8u)
+#define EEPROM_HEADER_SIZE              (10u)
+
+/* Cache for the payload that follows the header. The current record is 146
+ * bytes; the cap leaves room for the fields later format versions add. */
+#define EEPROM_MAX_DATA_SIZE            (256u)
+
+/* MasterReadBuf counts bytes in a uint8, so the payload is read in chunks. */
+#define EEPROM_READ_CHUNK_SIZE          (64u)
+
+/* Bounds the start-up probing. A header read takes ~130 us at 1 MHz, so four
+ * 1.25 ms ticks leave a wide margin while capping a full scan at ~40 ms. */
+#define EEPROM_XFER_TIMEOUT_TICKS       (4u)
+
+/* Payload packet layout of command 0x95. Every packet says how many further
+ * packets follow, so the host does not need to know the record size in advance. */
+#define EEPROM_INFO_PKT_REASON          (2u)
+#define EEPROM_INFO_PKT_ADDRESS         (3u)
+#define EEPROM_INFO_PKT_LEFT            (4u)
+#define EEPROM_INFO_PKT_LENGTH          (5u)
+#define EEPROM_INFO_PKT_DATA            (6u)
+#define EEPROM_INFO_PKT_HDR_LEN         (6u)
+/* A failure carries no data, so the packet ends after the address byte. */
+#define EEPROM_INFO_FAIL_LEN            (4u)
+#define EEPROM_INFO_PKT_DATA_SIZE       (DAP_PACKET_SIZE - EEPROM_INFO_PKT_HDR_LEN)
+
+/* Reported in EEPROM_INFO_PKT_REASON. Says why the status byte is what it is;
+ * every value other than OK is answered with CMD_STAT_FAIL_OP_FAIL. */
+#define EEPROM_SCAN_OK                  (0x00u)  /* EEPROM found, header and payload valid */
+#define EEPROM_SCAN_NO_DEVICE           (0x01u)  /* no address acknowledged */
+#define EEPROM_SCAN_READ_FAILED         (0x02u)  /* acknowledged, header read incomplete */
+#define EEPROM_SCAN_KEY_MISMATCH        (0x03u)  /* header read, magic key does not match */
+#define EEPROM_SCAN_DATA_FAILED         (0x04u)  /* header valid, payload read failed */
+#define EEPROM_SCAN_DATA_TOO_LARGE      (0x05u)  /* payload does not fit EEPROM_MAX_DATA_SIZE */
+#define EEPROM_SCAN_DATA_EMPTY          (0x06u)  /* header valid, size field is zero */
+
 #define I2C_MULTIRAN_FLAG               (0x80u)
 #define I2C_MULTIRAN_FLAG_SHIFTED       (0x08u)
 #define BYTE_MULTR_SHIFT                (0x04u)
@@ -346,6 +395,9 @@ void Bridge_PrepareSpiInterface(void);
 void Bridge_PrepareUartInterface(void);
 void Bridge_PrepareGpioInterface(void);
 void Bridge_SetUartTxDriveMode(uint8_t uartMode);
+
+uint8_t Bridge_EepromDetect(void);
+uint32_t GetExtendedInfo(const uint8_t *request, uint8_t *response);
 
 void UsbUartStart(void);
 void UartCtsRtsPinInit(void);

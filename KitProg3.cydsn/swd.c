@@ -91,7 +91,7 @@ static inline uint32_t pack32(const uint8_t *ptr)
 {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     uint32_t value;
-    __builtin_memcpy(&value, ptr, 4U);
+    (void)__builtin_memcpy(&value, ptr, 4U);
     return value;
 #else
     return (uint32_t)(ptr[0U] <<  0U) |
@@ -113,7 +113,7 @@ static inline uint32_t pack32(const uint8_t *ptr)
 static inline uint8_t *store32(uint8_t *buf, uint32_t value)
 {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-    __builtin_memcpy(buf, &value, 4U);
+    (void)__builtin_memcpy(buf, &value, 4U);
     buf += 4U;
 #else
     *buf++ = (uint8_t) value;
@@ -2361,7 +2361,7 @@ void Swd_SetHwIdleClk(uint8_t idleCycles)
  */
 static inline uint8_t SwdHwRead(uint32_t req, uint32_t *dst)
 {
-    SWD_PREAMBLE_WRITE_REG = hwPreamble[(uint16_t)req];
+    SWD_PREAMBLE_WRITE_REG = hwPreamble[(uint16_t)(req & 0x0000000Fu)];
     (void)SWD_STATUS_REG;
     SWD_Control_Write(READ_OP | SKIP_OP);
     do {} while (SWD_STATUS_REG == 0u);
@@ -2370,7 +2370,7 @@ static inline uint8_t SwdHwRead(uint32_t req, uint32_t *dst)
     SWD_Control_Write(NO_OP);
     if (idleGuardPeriod > 0u)
     {
-        CyDelayUs(idleGuardPeriod);
+        CyDelayUs((uint16_t)idleGuardPeriod);
     }
     return ack;
 }
@@ -2383,7 +2383,7 @@ static inline uint8_t SwdHwRead(uint32_t req, uint32_t *dst)
  */
 static inline uint8_t SwdHwReadDiscard(uint32_t req)
 {
-    SWD_PREAMBLE_WRITE_REG = hwPreamble[(uint16_t)req];
+    SWD_PREAMBLE_WRITE_REG = hwPreamble[(uint16_t)(req & 0x0000000Fu)];
     (void)SWD_STATUS_REG;
     SWD_Control_Write(READ_OP | SKIP_OP);
     do {} while (SWD_STATUS_REG == 0u);
@@ -2392,7 +2392,7 @@ static inline uint8_t SwdHwReadDiscard(uint32_t req)
     SWD_Control_Write(NO_OP);
     if (idleGuardPeriod > 0u)
     {
-        CyDelayUs(idleGuardPeriod);
+        CyDelayUs((uint16_t)idleGuardPeriod);
     }
     return ack;
 }
@@ -2407,7 +2407,7 @@ static inline uint8_t SwdHwReadDiscard(uint32_t req)
  */
 static inline uint8_t SwdHwWrite(uint32_t req, const uint32_t *src)
 {
-    SWD_PREAMBLE_WRITE_REG = hwPreamble[(uint16_t)req];
+    SWD_PREAMBLE_WRITE_REG = hwPreamble[(uint16_t)(req & 0x0000000Fu)];
     (void)SWD_STATUS_REG;
     SWD_DATA_WRITE_REG = *src;
     SWD_Control_Write(WRITE_OP | SKIP_OP);
@@ -2416,7 +2416,7 @@ static inline uint8_t SwdHwWrite(uint32_t req, const uint32_t *src)
     SWD_Control_Write(NO_OP);
     if (idleGuardPeriod > 0u)
     {
-        CyDelayUs(idleGuardPeriod);
+        CyDelayUs((uint16_t)idleGuardPeriod);
     }
     return ack;
 }
